@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from "react";
-import useCamera, { type BallPos } from "@/hooks/useCamera";
+import type { PhysicsResult } from "@/types/physics";
+import useCamera from "@/hooks/useCamera";
 import useAR from "@/hooks/useAR";
 import ARButton from "@/components/ARButton/ARButton";
 import ModeToggle from "@/components/ModeToggle/ModeToggle";
@@ -31,10 +32,11 @@ function Main() {
         containerRef,
     });
 
-    // 매 프레임마다 카메라 훅에서 공 위치를 받아 AR 훅으로 전달
+    // 매 프레임마다 카메라 훅에서 결과를 받아 AR 훅으로 전달
+    // TODO: 물리엔진 완성되면 useCamera 안의 TODO 부분만 교체하면 됩니다
     const handleFrame = useCallback(
-        (ballPos: BallPos | null) => {
-            drawAR(ballPos);
+        (result: PhysicsResult | null) => {
+            drawAR(result);
         },
         [drawAR],
     );
