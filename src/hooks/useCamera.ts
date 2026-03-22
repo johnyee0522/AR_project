@@ -79,8 +79,8 @@ function useCamera({ videoCanvasRef, onFrame }: UseCameraOptions): UseCameraRetu
                         layout: [{ offset: 0, stride: frameCapture.width * 4 }],
                     });
 
-                    const { frameBuffer, ballPos } = cuebit.process(buffer);
-                    drawer.draw(frameBuffer);
+                    const { ballPos } = cuebit.process(buffer);
+                    drawer.draw(buffer);  // ← 원본 카메라 영상
 
                     // TODO: 물리엔진 완성 후 교체 지점
                     // 지금은 Cuebit이 감지한 공 위치를 PhysicsResult 형태로 임시 변환
