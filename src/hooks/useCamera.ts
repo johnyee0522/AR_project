@@ -1,17 +1,14 @@
-import { useState, useEffect, useCallback, RefObject } from "react";
+import { useState, useEffect, useCallback } from "react";
+import type { RefObject } from "react";
 import createFrameCapture from "@/lib/capture";
 import { getOpenCv } from "@/lib/opencv";
 import Cuebit from "@/lib/cuebit";
 import { todo } from "@/common";
-
-export interface BallPos {
-    x: number;
-    y: number;
-}
+import type { PhysicsResult } from "@/types/physics";
 
 interface UseCameraOptions {
     videoCanvasRef: RefObject<HTMLCanvasElement | null>;
-    onFrame: (ballPos: BallPos | null) => void;
+    onFrame: (result: PhysicsResult | null) => void;
 }
 
 interface UseCameraReturn {
@@ -21,9 +18,10 @@ interface UseCameraReturn {
 
 /**
  * 카메라 스트림을 열고, 매 프레임마다 OpenCV로 공 위치를 감지한 뒤
- * onFrame 콜백으로 결과를 전달하는 훅.
+ * onFrame 콜백으로 PhysicsResult를 전달하는 훅.
  *
- * 컴포넌트가 언마운트되면 카메라도 자동으로 꺼짐.
+ * 현재는 Cuebit이 감지한 빨간 공 위치를 PhysicsResult 형태로 변환해서 넘깁니다.
+ * 물리엔진이 완성되면 아래 TODO 부분만 교체하면 됩니다.
  */
 function useCamera({ videoCanvasRef, onFrame }: UseCameraOptions): UseCameraReturn {
     const [cvLoaded, setCvLoaded] = useState(false);
@@ -51,7 +49,6 @@ function useCamera({ videoCanvasRef, onFrame }: UseCameraOptions): UseCameraRetu
 
         const startCamera = async () => {
             try {
-                // 1. 카메라 스트림 열기
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: false,
                     video: {
@@ -67,23 +64,15 @@ function useCamera({ videoCanvasRef, onFrame }: UseCameraOptions): UseCameraRetu
                     frameCapture.width * frameCapture.height * 4,
                 );
 
-                // 2. 비디오 캔버스 드로어 생성
                 const canvas: HTMLCanvasElement =
                     videoCanvasRef.current ?? todo("canvas가 없음");
-                const drawer = createFrameDrawer(
-                    canvas,
-                    frameCapture.width,
-                    frameCapture.height,
-                );
+                const drawer = createFrameDrawer(canvas, frameCapture.width, frameCapture.height);
 
-                // 3. OpenCV 초기화
                 await getOpenCv();
                 setCvLoaded(true);
 
-                // 4. Cuebit(공 감지 엔진) 생성
                 const cuebit = new Cuebit(frameCapture.width, frameCapture.height);
 
-                // 5. 프레임 루프 시작
                 await frameCapture.on(async (frame) => {
                     await frame.copyTo(buffer, {
                         format: "RGBA",
@@ -91,12 +80,33 @@ function useCamera({ videoCanvasRef, onFrame }: UseCameraOptions): UseCameraRetu
                     });
 
                     const { frameBuffer, ballPos } = cuebit.process(buffer);
-
-                    // 화면에 프레임 그리기
                     drawer.draw(frameBuffer);
 
-                    // 부모(Main)에게 공 위치 전달
-                    onFrame(ballPos);
+                    // TODO: 물리엔진 완성 후 교체 지점
+                    // 지금은 Cuebit이 감지한 공 위치를 PhysicsResult 형태로 임시 변환
+                    // 물리엔진이 완성되면 ballPos를 물리엔진에 넘기고,
+                    // 물리엔진 결과를 그대로 onFrame에 넘기면 됩니다.
+                    //
+                    // 예시:
+                    // const physicsResult = await physicsEngine.simulate(strokeInput);
+                    // onFrame(physicsResult);
+
+                    if (!ballPos) {
+                        onFrame(null);
+                        return;
+                    }
+
+                    // 임시: 감지된 공 위치만으로 PhysicsResult 구성
+                    const tempResult: PhysicsResult = {
+                        trajectories: [
+                            {
+                                ballId: "red",
+                                path: [{ x: ballPos.x, y: ballPos.y }],
+                                cushionPoints: [],
+                            },
+                        ],
+                    };
+                    onFrame(tempResult);
                 });
             } catch (err) {
                 console.error("카메라 시작 에러:", err);
@@ -107,11 +117,7 @@ function useCamera({ videoCanvasRef, onFrame }: UseCameraOptions): UseCameraRetu
         };
 
         startCamera();
-
-        // 컴포넌트 언마운트 시 카메라 종료
-        return () => {
-            ac.abort();
-        };
+        return () => { ac.abort(); };
     }, [createFrameDrawer, videoCanvasRef, onFrame]);
 
     return { cvLoaded, errorMsg };
