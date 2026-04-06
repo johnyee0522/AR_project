@@ -89,11 +89,12 @@ function useAR({
 
 			// 각 공의 궤적을 순서대로 그리기
 			for (const trajectory of result.trajectories) {
-				if (trajectory.path.length < 2) continue;
+				if (trajectory.waypoints.length < 2) continue;
 
 				const color = getBallColor(trajectory.ballId);
+				const start = trajectory.waypoints[0];
 
-				// 메인 캔버스: 궤적선
+				// 메인 캔버스: 궤적선 (점선)
 				ctx.save();
 				ctx.strokeStyle = color;
 				ctx.lineWidth = 2;
@@ -101,30 +102,14 @@ function useAR({
 				ctx.shadowBlur = 10;
 				ctx.shadowColor = color;
 				ctx.beginPath();
-				ctx.moveTo(trajectory.path[0].x, trajectory.path[0].y);
-				for (const point of trajectory.path.slice(1)) {
+				ctx.moveTo(start.x, start.y);
+				for (const point of trajectory.waypoints.slice(1)) {
 					ctx.lineTo(point.x, point.y);
 				}
 				ctx.stroke();
 				ctx.restore();
 
-				// 메인 캔버스: 쿠션 반사점 (다이아몬드 마커)
-				for (const cp of trajectory.cushionPoints) {
-					ctx.save();
-					ctx.fillStyle = color;
-					ctx.globalAlpha = 0.8;
-					ctx.beginPath();
-					ctx.moveTo(cp.x, cp.y - 6);
-					ctx.lineTo(cp.x + 6, cp.y);
-					ctx.lineTo(cp.x, cp.y + 6);
-					ctx.lineTo(cp.x - 6, cp.y);
-					ctx.closePath();
-					ctx.fill();
-					ctx.restore();
-				}
-
 				// 메인 캔버스: 시작점 원
-				const start = trajectory.path[0];
 				ctx.save();
 				ctx.beginPath();
 				ctx.arc(start.x, start.y, 12, 0, 2 * Math.PI);
@@ -140,11 +125,8 @@ function useAR({
 				mCtx.strokeStyle = color;
 				mCtx.lineWidth = 1;
 				mCtx.beginPath();
-				mCtx.moveTo(
-					trajectory.path[0].x * scaleX,
-					trajectory.path[0].y * scaleY,
-				);
-				for (const point of trajectory.path.slice(1)) {
+				mCtx.moveTo(start.x * scaleX, start.y * scaleY);
+				for (const point of trajectory.waypoints.slice(1)) {
 					mCtx.lineTo(point.x * scaleX, point.y * scaleY);
 				}
 				mCtx.stroke();
@@ -155,17 +137,6 @@ function useAR({
 				mCtx.fillStyle = color;
 				mCtx.fill();
 				mCtx.restore();
-			}
-
-			// 득점 예상 시 화면 테두리 초록 강조
-			if (result.isScoring) {
-				ctx.save();
-				ctx.strokeStyle = "#2ed573";
-				ctx.lineWidth = 4;
-				ctx.shadowBlur = 20;
-				ctx.shadowColor = "#2ed573";
-				ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-				ctx.restore();
 			}
 		},
 		[arCanvasRef, minimapCanvasRef],

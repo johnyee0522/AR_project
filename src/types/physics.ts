@@ -66,30 +66,16 @@ export interface BallTrajectory {
 	/** 어떤 공인지 구분하는 ID (예: "cue", "red", "yellow") */
 	ballId: string;
 	/**
-	 * 이동 경로를 이루는 좌표 배열
-	 * 순서대로 연결하면 예측 궤적선이 됨
-	 * 예: [{x:100,y:200}, {x:150,y:180}, ...]
+	 * 경로의 꺾이는 지점 좌표 배열
+	 * 시작점 → 쿠션/충돌 지점 → 최종 멈춤 위치 순서로
+	 * 이 점들을 순서대로 직선으로 이으면 예측 궤적선이 됨
+	 * 예: [{x:100,y:200}, {x:300,y:150}, {x:450,y:300}]
 	 */
-	path: Point[];
-	/**
-	 * 쿠션에 부딪힌 좌표들 (경로 중 반사가 일어난 지점)
-	 * 프론트에서 반사 포인트 표시할 때 사용
-	 */
-	cushionPoints: Point[];
+	waypoints: Point[];
 }
 
 /** 물리 엔진이 최종적으로 반환하는 결과값 */
 export interface PhysicsResult {
 	/** 각 공의 예측 궤적 배열 */
 	trajectories: BallTrajectory[];
-	/**
-	 * 득점 여부 (선택값)
-	 *  true = 이 타격으로 득점 예상
-	 */
-	isScoring?: boolean;
-	/**
-	 * 시뮬레이션 소요 시간 (ms) — 성능 측정용
-	 * 물리엔진 팀이 채워주면 됩니다
-	 */
-	simulationTimeMs?: number;
 }

@@ -138,9 +138,8 @@ function useCamera({
 					const tempResult: PhysicsResult = {
 						trajectories: [
 							{
-								ballId: "red",
-								path: [{ x: ballPos.x, y: ballPos.y }],
-								cushionPoints: [],
+								ballId: "cue",
+								waypoints: [{ x: ballPos.x, y: ballPos.y }],
 							},
 						],
 					};
