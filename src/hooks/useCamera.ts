@@ -119,36 +119,26 @@ function useCamera({
 					});
 
 					// Cuebit으로 프레임 처리 — 단계별 이미지 + 공 위치 반환
-					const { frames, ballPos } = cuebit.process(buffer);
+					const { frames } = cuebit.process(buffer);
 
 					// 현재 선택된 디버그 뷰에 맞는 이미지를 화면에 표시
 					drawer.draw(frames[debugViewRef.current]);
 
-					// 공이 감지되면 PhysicsResult 구성해서 전달
-					if (!ballPos) {
-						onFrameRef.current(null);
-						return;
-					}
-
-					logger.debug(
-						`공 감지 — x:${ballPos.x.toFixed(0)}, y:${ballPos.y.toFixed(0)}`,
-					);
-
-					// TODO: 물리엔진 완성되면 여기서 physicsEngine.simulate() 호출
-					const tempResult: PhysicsResult = {
+					// 🧪 테스트용 고정 좌표 (카메라 감지 없이 렌더링 테스트)
+					// 화면 크기 기준: 1000x1000 기준 좌표
+					const testResult: PhysicsResult = {
 						trajectories: [
 							{
 								ballId: "cue",
 								waypoints: [
-						{ x: ballPos.x, y: ballPos.y },
-						{ x: ballPos.x + 100, y: ballPos.y - 80 },
-						{ x: ballPos.x + 200, y: ballPos.y + 50 },
-						{ x: ballPos.x + 250, y: ballPos.y + 150 },
-					],
+									{ x: 300, y: 700 },  // 수구 위치
+									{ x: 500, y: 400 },  // 쿠션 반사 지점
+									{ x: 700, y: 600 },  // 빨간공 충돌 지점
+								],
 							},
 						],
 					};
-					onFrameRef.current(tempResult);
+					onFrameRef.current(testResult);
 				});
 
 				logger.info("프레임 루프 종료");

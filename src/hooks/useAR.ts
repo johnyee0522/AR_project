@@ -87,6 +87,24 @@ function useAR({
 			const scaleX = minimapCanvas.width / canvas.width;
 			const scaleY = minimapCanvas.height / canvas.height;
 
+			// 🧪 테스트용 고정 공 위치 (수구, 빨간공, 노란공)
+			const testBalls = [
+				{ ballId: "cue",    x: 300, y: 700 },
+				{ ballId: "red",    x: 700, y: 600 },
+				{ ballId: "yellow", x: 500, y: 400 },
+			];
+
+			// 미니맵에 공 3개 표시
+			for (const ball of testBalls) {
+				const color = getBallColor(ball.ballId);
+				mCtx.save();
+				mCtx.beginPath();
+				mCtx.arc(ball.x * scaleX, ball.y * scaleY, 4, 0, 2 * Math.PI);
+				mCtx.fillStyle = color;
+				mCtx.fill();
+				mCtx.restore();
+			}
+
 			// 각 공의 궤적을 순서대로 그리기
 			for (const trajectory of result.trajectories) {
 				if (trajectory.waypoints.length < 2) continue;
