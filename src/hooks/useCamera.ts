@@ -139,7 +139,12 @@ function useCamera({
 						trajectories: [
 							{
 								ballId: "cue",
-								waypoints: [{ x: ballPos.x, y: ballPos.y }],
+								waypoints: [
+						{ x: ballPos.x, y: ballPos.y },
+						{ x: ballPos.x + 100, y: ballPos.y - 80 },
+						{ x: ballPos.x + 200, y: ballPos.y + 50 },
+						{ x: ballPos.x + 250, y: ballPos.y + 150 },
+					],
 							},
 						],
 					};
