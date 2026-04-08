@@ -17,21 +17,25 @@ interface UseARReturn {
 
 // 공 ID별 궤적선 색상
 const BALL_COLORS: Record<string, string> = {
-	cue: "#ffffff", // 수구 — 흰색
-	red: "#ff4757", // 적구 — 빨간색
+	cue: "#ffffff",    // 수구 — 흰색
+	red: "#ff4757",    // 적구 — 빨간색
 	yellow: "#ffd700", // 황구 — 노란색
 };
-const FALLBACK_COLOR = "#00e5ff"; // 지정되지 않은 공 색상
+const FALLBACK_COLOR = "#00e5ff";
 
 function getBallColor(ballId: string): string {
 	return BALL_COLORS[ballId] ?? FALLBACK_COLOR;
 }
 
 /**
- * AR 오버레이(궤적선, 쿠션 반사점, 미니맵)를 그리는 훅.
+ * AR 오버레이(궤적선, 미니맵)를 그리는 훅.
  *
- * drawAR()에 PhysicsResult를 넘기면 모든 공의 궤적을 화면에 그려줍니다.
- * 물리엔진이 완성되기 전까지는 null을 넘기면 됩니다.
+ * drawAR()에 PhysicsResult를 넘기면 수구의 예측 궤적을 화면에 그려줍니다.
+ * 물리엔진 연동 전까지는 useCamera.ts의 테스트용 고정 좌표로 동작합니다.
+ *
+ * 좌표 기준:
+ *   - PhysicsResult의 waypoints는 0~1000 범위의 탑뷰 좌표
+ *   - 실제 화면에 그릴 때 canvas 크기에 맞게 비율로 변환
  */
 function useAR({
 	arCanvasRef,
@@ -87,39 +91,20 @@ function useAR({
 			const scaleX = minimapCanvas.width / canvas.width;
 			const scaleY = minimapCanvas.height / canvas.height;
 
-			// 🧪 테스트용 고정 공 위치 (수구, 빨간공, 노란공)
-			const testBalls = [
-				{ ballId: "cue",    x: 300, y: 700 },
-				{ ballId: "red",    x: 700, y: 600 },
-				{ ballId: "yellow", x: 500, y: 400 },
-			];
-
-			// 미니맵에 공 3개 표시
-			for (const ball of testBalls) {
-				const color = getBallColor(ball.ballId);
-				mCtx.save();
-				mCtx.beginPath();
-				mCtx.arc(ball.x * scaleX, ball.y * scaleY, 4, 0, 2 * Math.PI);
-				mCtx.fillStyle = color;
-				mCtx.fill();
-				mCtx.restore();
-			}
-
-			// 각 공의 궤적을 순서대로 그리기
+			// 각 공의 궤적 그리기
 			for (const trajectory of result.trajectories) {
 				if (trajectory.waypoints.length < 2) continue;
 
 				const color = getBallColor(trajectory.ballId);
 
-				// waypoints를 canvas 크기에 맞게 스케일 변환
-				// (물리엔진 좌표는 1000x1000 기준, canvas는 실제 화면 크기)
+				// waypoints(0~1000 기준)를 실제 canvas 크기로 변환
 				const scaled = trajectory.waypoints.map((p) => ({
 					x: (p.x / 1000) * canvas.width,
 					y: (p.y / 1000) * canvas.height,
 				}));
 				const start = scaled[0];
 
-				// 메인 캔버스: 궤적선 (점선)
+				// 메인 캔버스: 점선 궤적
 				ctx.save();
 				ctx.strokeStyle = color;
 				ctx.lineWidth = 2;
@@ -134,7 +119,7 @@ function useAR({
 				ctx.stroke();
 				ctx.restore();
 
-				// 메인 캔버스: 시작점 원
+				// 메인 캔버스: 수구 위치 원
 				ctx.save();
 				ctx.beginPath();
 				ctx.arc(start.x, start.y, 12, 0, 2 * Math.PI);
@@ -145,7 +130,7 @@ function useAR({
 				ctx.fill();
 				ctx.restore();
 
-				// 미니맵: 궤적선
+				// 미니맵: 점선 궤적
 				mCtx.save();
 				mCtx.strokeStyle = color;
 				mCtx.lineWidth = 1;
@@ -156,7 +141,7 @@ function useAR({
 				}
 				mCtx.stroke();
 
-				// 미니맵: 시작점 점
+				// 미니맵: 수구 위치 점
 				mCtx.beginPath();
 				mCtx.arc(start.x * scaleX, start.y * scaleY, 3, 0, 2 * Math.PI);
 				mCtx.fillStyle = color;

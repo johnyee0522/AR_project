@@ -20,7 +20,7 @@ interface UseCameraReturn {
 }
 
 /**
- * 카메라 스트림을 열고, 매 프레임마다 OpenCV로 처리한 뒤
+ * 카메라 스트림을 열고, 매 프레임마다 이미지를 처리한 뒤
  * onFrame 콜백으로 PhysicsResult를 전달하는 훅.
  *
  * debugView 값에 따라 화면에 표시되는 이미지가 바뀜:
@@ -118,25 +118,28 @@ function useCamera({
 						layout: [{ offset: 0, stride: frameCapture.width * 4 }],
 					});
 
-					// Cuebit으로 프레임 처리 — 단계별 이미지 + 공 위치 반환
+					// 프레임 처리 — 단계별 디버그 이미지 반환
 					const { frames } = cuebit.process(buffer);
 
-					// 현재 선택된 디버그 뷰에 맞는 이미지를 화면에 표시
+					// 현재 선택된 디버그 뷰를 화면에 표시
 					drawer.draw(frames[debugViewRef.current]);
 
-					// 🧪 테스트용 고정 좌표 (캔버스 크기 비율 기준)
-					const W = frameCapture.width;
-					const H = frameCapture.height;
+					// TODO: YOLO + 물리엔진 연동 후 아래 코드로 교체
+					// const { ballPos, corners, cueDirection } = yolo.detect(buffer);
+					// const result = await physicsEngine.simulate(ballPos, corners, cueDirection);
+					// onFrameRef.current(result);
+
+					// 🧪 테스트용 고정 좌표 (좌표 기준: 0~1000)
 					const testResult: PhysicsResult = {
 						trajectories: [
 							{
 								ballId: "cue",
 								waypoints: [
-									{ x: W * 0.2, y: H * 0.75 }, // 수구 (왼쪽 아래)
-									{ x: W * 0.5, y: H * 0.55 }, // 쿠션1 (중앙)
-									{ x: W * 0.75, y: H * 0.65 }, // 쿠션2 (오른쪽)
-									{ x: W * 0.55, y: H * 0.35 }, // 충돌 (중앙 위)
-									{ x: W * 0.25, y: H * 0.2 },  // 멈춤 (왼쪽 위)
+									{ x: 200, y: 750 }, // 수구 (왼쪽 아래)
+									{ x: 500, y: 550 }, // 쿠션1 (중앙)
+									{ x: 750, y: 650 }, // 쿠션2 (오른쪽)
+									{ x: 550, y: 350 }, // 충돌 (중앙 위)
+									{ x: 250, y: 200 }, // 멈춤 (왼쪽 위)
 								],
 							},
 						],
@@ -160,7 +163,7 @@ function useCamera({
 			logger.info("카메라 스트림 종료 (컴포넌트 언마운트)");
 			ac.abort();
 		};
-	}, [createFrameDrawer, videoCanvasRef]); // onFrame, debugView는 ref로 관리하므로 의존성에서 제외
+	}, [createFrameDrawer, videoCanvasRef]);
 
 	return { cvLoaded, errorMsg };
 }
