@@ -110,7 +110,14 @@ function useAR({
 				if (trajectory.waypoints.length < 2) continue;
 
 				const color = getBallColor(trajectory.ballId);
-				const start = trajectory.waypoints[0];
+
+				// waypoints를 canvas 크기에 맞게 스케일 변환
+				// (물리엔진 좌표는 1000x1000 기준, canvas는 실제 화면 크기)
+				const scaled = trajectory.waypoints.map((p) => ({
+					x: (p.x / 1000) * canvas.width,
+					y: (p.y / 1000) * canvas.height,
+				}));
+				const start = scaled[0];
 
 				// 메인 캔버스: 궤적선 (점선)
 				ctx.save();
@@ -121,7 +128,7 @@ function useAR({
 				ctx.shadowColor = color;
 				ctx.beginPath();
 				ctx.moveTo(start.x, start.y);
-				for (const point of trajectory.waypoints.slice(1)) {
+				for (const point of scaled.slice(1)) {
 					ctx.lineTo(point.x, point.y);
 				}
 				ctx.stroke();
@@ -144,7 +151,7 @@ function useAR({
 				mCtx.lineWidth = 1;
 				mCtx.beginPath();
 				mCtx.moveTo(start.x * scaleX, start.y * scaleY);
-				for (const point of trajectory.waypoints.slice(1)) {
+				for (const point of scaled.slice(1)) {
 					mCtx.lineTo(point.x * scaleX, point.y * scaleY);
 				}
 				mCtx.stroke();
