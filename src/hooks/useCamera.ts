@@ -124,16 +124,19 @@ function useCamera({
 					// 현재 선택된 디버그 뷰에 맞는 이미지를 화면에 표시
 					drawer.draw(frames[debugViewRef.current]);
 
-					// 🧪 테스트용 고정 좌표 (카메라 감지 없이 렌더링 테스트)
-					// 화면 크기 기준: 1000x1000 기준 좌표
+					// 🧪 테스트용 고정 좌표 (캔버스 크기 비율 기준)
+					const W = frameCapture.width;
+					const H = frameCapture.height;
 					const testResult: PhysicsResult = {
 						trajectories: [
 							{
 								ballId: "cue",
 								waypoints: [
-									{ x: 300, y: 700 },  // 수구 위치
-									{ x: 500, y: 400 },  // 쿠션 반사 지점
-									{ x: 700, y: 600 },  // 빨간공 충돌 지점
+									{ x: W * 0.2, y: H * 0.75 }, // 수구 (왼쪽 아래)
+									{ x: W * 0.5, y: H * 0.55 }, // 쿠션1 (중앙)
+									{ x: W * 0.75, y: H * 0.65 }, // 쿠션2 (오른쪽)
+									{ x: W * 0.55, y: H * 0.35 }, // 충돌 (중앙 위)
+									{ x: W * 0.25, y: H * 0.2 },  // 멈춤 (왼쪽 위)
 								],
 							},
 						],
@@ -141,7 +144,6 @@ function useCamera({
 					onFrameRef.current(testResult);
 				});
 
-				
 				logger.info("프레임 루프 종료");
 				cuebit.destroy();
 				logger.debug("Cuebit 메모리 해제 완료");
