@@ -141,6 +141,7 @@ function useCamera({
 					onFrameRef.current(testResult);
 				});
 
+				
 				logger.info("프레임 루프 종료");
 				cuebit.destroy();
 				logger.debug("Cuebit 메모리 해제 완료");
