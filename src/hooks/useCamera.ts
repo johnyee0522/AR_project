@@ -5,156 +5,148 @@ import { getOpenCv } from "@/lib/opencv";
 import Cuebit from "@/lib/cuebit";
 import type { DebugView } from "@/lib/cuebit";
 import { todo } from "@/common";
-import type { PhysicsResult } from "@/types/physics";
+import type { PhysicsResult, Point } from "@/types/physics";
 import { simulateTrajectory } from "@/lib/simulator";
 import logger from "@/lib/logger";
 
+// ✨ Main에서 넘어오는 테스트 데이터 규격
+interface TestProps {
+    cue: Point;
+    obj1: Point;
+    obj2: Point;
+    angle: number;
+}
+
 interface UseCameraOptions {
-	videoCanvasRef: RefObject<HTMLCanvasElement | null>;
-	debugView: DebugView;
-	onFrame: (result: PhysicsResult | null) => void;
+    videoCanvasRef: RefObject<HTMLCanvasElement | null>;
+    debugView: DebugView;
+    onFrame: (result: PhysicsResult | null) => void;
+    testProps: TestProps; // ✨ 옵션에 추가됨
 }
 
 interface UseCameraReturn {
-	cvLoaded: boolean;
-	errorMsg: string;
+    cvLoaded: boolean;
+    errorMsg: string;
 }
 
-/**
- * 카메라 스트림을 열고, 매 프레임마다 이미지를 처리한 뒤
- * onFrame 콜백으로 PhysicsResult를 전달하는 훅.
- *
- * debugView 값에 따라 화면에 표시되는 이미지가 바뀜:
- *   original → 원본 카메라
- *   hsv      → HSV 변환
- *   mask     → 마스킹 결과
- *   contour  → 컨투어 검출
- */
 function useCamera({
-	videoCanvasRef,
-	debugView,
-	onFrame,
+    videoCanvasRef,
+    debugView,
+    onFrame,
+    testProps,
 }: UseCameraOptions): UseCameraReturn {
-	const [cvLoaded, setCvLoaded] = useState(false);
-	const [errorMsg, setErrorMsg] = useState("");
+    const [cvLoaded, setCvLoaded] = useState(false);
+    const [errorMsg, setErrorMsg] = useState("");
 
-	// debugView, onFrame이 바뀌어도 프레임 루프를 재시작하지 않기 위해 ref로 관리
-	const debugViewRef = useRef<DebugView>(debugView);
-	useEffect(() => {
-		debugViewRef.current = debugView;
-	}, [debugView]);
+    const debugViewRef = useRef<DebugView>(debugView);
+    useEffect(() => {
+        debugViewRef.current = debugView;
+    }, [debugView]);
 
-	const onFrameRef = useRef(onFrame);
-	useEffect(() => {
-		onFrameRef.current = onFrame;
-	}, [onFrame]);
+    const onFrameRef = useRef(onFrame);
+    useEffect(() => {
+        onFrameRef.current = onFrame;
+    }, [onFrame]);
 
-	const createFrameDrawer = useCallback(
-		(canvas: HTMLCanvasElement, width: number, height: number) => {
-			canvas.width = width;
-			canvas.height = height;
-			const context = canvas.getContext("2d");
-			if (!context) {
-				throw new Error("Failed to get canvas context");
-			}
-			return {
-				draw: (data: Uint8ClampedArray<ArrayBuffer>) => {
-					context.putImageData(
-						new ImageData(data, canvas.width, canvas.height),
-						0,
-						0,
-					);
-				},
-			};
-		},
-		[],
-	);
+    // ✨ 슬라이더를 움직일 때마다 카메라가 재시작되지 않도록 Ref로 상태값 유지
+    const testPropsRef = useRef<TestProps>(testProps);
+    useEffect(() => {
+        testPropsRef.current = testProps;
+    }, [testProps]);
 
-	useEffect(() => {
-		const ac = new AbortController();
+    const createFrameDrawer = useCallback(
+        (canvas: HTMLCanvasElement, width: number, height: number) => {
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d");
+            if (!context) {
+                throw new Error("Failed to get canvas context");
+            }
+            return {
+                draw: (data: Uint8ClampedArray<ArrayBuffer>) => {
+                    context.putImageData(
+                        new ImageData(data, canvas.width, canvas.height),
+                        0,
+                        0,
+                    );
+                },
+            };
+        },
+        [],
+    );
 
-		const startCamera = async () => {
-			try {
-				logger.info("카메라 스트림 요청 중...");
-				const stream = await navigator.mediaDevices.getUserMedia({
-					audio: false,
-					video: {
-						width: 1000,
-						height: 1000,
-						facingMode: { ideal: "environment" },
-					},
-				});
-				logger.info("카메라 스트림 획득 완료");
+    useEffect(() => {
+        const ac = new AbortController();
 
-				const [track] = stream.getVideoTracks();
-				const frameCapture = await createFrameCapture(ac.signal, track);
-				logger.debug(
-					`프레임 캡처 생성 완료 — ${frameCapture.width}x${frameCapture.height}`,
-				);
+        const startCamera = async () => {
+            try {
+                logger.info("카메라 스트림 요청 중...");
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        width: 1000,
+                        height: 1000,
+                        facingMode: { ideal: "environment" },
+                    },
+                });
+                logger.info("카메라 스트림 획득 완료");
 
-				const buffer = new Uint8ClampedArray(
-					frameCapture.width * frameCapture.height * 4,
-				);
+                const [track] = stream.getVideoTracks();
+                const frameCapture = await createFrameCapture(ac.signal, track);
 
-				const canvas: HTMLCanvasElement =
-					videoCanvasRef.current ?? todo("canvas가 없음");
-				const drawer = createFrameDrawer(
-					canvas,
-					frameCapture.width,
-					frameCapture.height,
-				);
+                const buffer = new Uint8ClampedArray(
+                    frameCapture.width * frameCapture.height * 4,
+                );
 
-				logger.info("OpenCV 초기화 중...");
-				await getOpenCv();
-				setCvLoaded(true);
-				logger.info("OpenCV 초기화 완료");
+                const canvas: HTMLCanvasElement =
+                    videoCanvasRef.current ?? todo("canvas가 없음");
+                const drawer = createFrameDrawer(
+                    canvas,
+                    frameCapture.width,
+                    frameCapture.height,
+                );
 
-				const cuebit = new Cuebit(frameCapture.width, frameCapture.height);
-				logger.debug("Cuebit 인스턴스 생성 완료");
+                await getOpenCv();
+                setCvLoaded(true);
 
-				logger.info("프레임 루프 시작");
-				await frameCapture.on(async (frame) => {
-					await frame.copyTo(buffer, {
-						format: "RGBA",
-						layout: [{ offset: 0, stride: frameCapture.width * 4 }],
-					});
+                const cuebit = new Cuebit(frameCapture.width, frameCapture.height);
 
-					// 프레임 처리 — 단계별 디버그 이미지 반환
-					const { frames } = cuebit.process(buffer);
+                await frameCapture.on(async (frame) => {
+                    await frame.copyTo(buffer, {
+                        format: "RGBA",
+                        layout: [{ offset: 0, stride: frameCapture.width * 4 }],
+                    });
 
-					// 현재 선택된 디버그 뷰를 화면에 표시
-					drawer.draw(frames[debugViewRef.current]);
+                    const { frames } = cuebit.process(buffer);
+                    drawer.draw(frames[debugViewRef.current]);
 
-					// TODO: YOLO 연동 후 ballPos와 cueAngle을 실제 감지값으로 교체
-					// const { ballPos, cueAngle } = yolo.detect(buffer);
+                    // ✨ 최신 슬라이더 값을 가져옴
+                    const currentTestProps = testPropsRef.current;
+                    
+                    // ✨ 시뮬레이터 호출 (수구위치, 타격각도, [적구1위치, 적구2위치])
+                    const result = simulateTrajectory(
+                        currentTestProps.cue,
+                        currentTestProps.angle,
+                        [currentTestProps.obj1, currentTestProps.obj2]
+                    );
 
-					// 임시 시뮬레이터 — 입사각=반사각 원리로 waypoints 계산
-					// (진짜 물리엔진 완성되면 lib/simulator를 교체하면 됨)
-					const ballPos = { x: 200, y: 750 }; // 임시 수구 위치
-					const cueAngle = 45;                 // 임시 타격 각도 (45도)
-					const result = simulateTrajectory(ballPos, cueAngle);
-					onFrameRef.current(result);
-				});
+                    onFrameRef.current(result);
+                });
 
-				logger.info("프레임 루프 종료");
-				cuebit.destroy();
-				logger.debug("Cuebit 메모리 해제 완료");
-			} catch (err) {
-				logger.error({ err }, "카메라 시작 에러");
-				setErrorMsg(
-					"카메라 또는 AI 엔진을 켜지 못했습니다. HTTPS 배포 환경에서 테스트해주세요.",
-				);
-			}
-		};
+                cuebit.destroy();
+            } catch (err) {
+                logger.error({ err }, "카메라 시작 에러");
+                setErrorMsg("카메라 권한을 확인해주세요.");
+            }
+        };
 
-		startCamera();
-		return () => {
-			logger.info("카메라 스트림 종료 (컴포넌트 언마운트)");
-			ac.abort();
-		};
-	}, [createFrameDrawer, videoCanvasRef]);
+        startCamera();
+        return () => {
+            ac.abort();
+        };
+    }, [createFrameDrawer, videoCanvasRef]);
 
-	return { cvLoaded, errorMsg };
+    return { cvLoaded, errorMsg };
 }
 
 export default useCamera;

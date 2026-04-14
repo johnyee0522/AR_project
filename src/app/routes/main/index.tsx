@@ -4,105 +4,116 @@ import type { DebugView } from "@/lib/cuebit";
 import useCamera from "@/hooks/useCamera";
 import useAR from "@/hooks/useAR";
 import ARButton from "@/components/ARButton/ARButton";
-import ModeToggle from "@/components/ModeToggle/ModeToggle";
 import Minimap from "@/components/Minimap/Minimap";
 import DebugViewToggle from "@/components/DebugViewToggle/DebugViewToggle";
 import DevLog from "@/components/DevLog/DevLog";
 import styles from "./Main.module.css";
 
-/** 당구 모드 타입 — ModeToggle과 공유 */
-export type BilliardMode = "3구" | "4구";
-
-/**
- * 메인 페이지.
- * 이 파일은 "조립"만 담당해요.
- *
- * - 카메라/OpenCV 로직  → useCamera 훅
- * - AR 오버레이         → useAR 훅
- * - UI 컴포넌트들       → ARButton, ModeToggle, Minimap, DebugViewToggle
- * - 개발용 로그 패널    → DevLog (개발 환경에서만 표시)
- */
 function Main() {
-	const videoCanvasRef = useRef<HTMLCanvasElement>(null);
-	const arCanvasRef = useRef<HTMLCanvasElement>(null);
-	const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
-	const containerRef = useRef<HTMLDivElement>(null);
+    const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+    const arCanvasRef = useRef<HTMLCanvasElement>(null);
+    const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
-	const [mode, setMode] = useState<BilliardMode>("4구"); // 현재 당구 모드
-	const [debugView, setDebugView] = useState<DebugView>("original"); // 현재 디버그 뷰
+    const [debugView, setDebugView] = useState<DebugView>("original");
 
-	// AR 훅: 오버레이 그리기
-	const { isARMode, toggleARMode, drawAR } = useAR({
-		arCanvasRef,
-		minimapCanvasRef,
-		containerRef,
-	});
+    // ✨ 공 3개와 각도를 조작하기 위한 테스트 상태값
+    const [testCue, setTestCue] = useState({ x: 200, y: 750 });
+    const [testObj1, setTestObj1] = useState({ x: 500, y: 500 });
+    const [testObj2, setTestObj2] = useState({ x: 700, y: 300 });
+    const [testAngle, setTestAngle] = useState(45);
 
-	// 매 프레임마다 카메라 훅에서 결과를 받아 AR 훅으로 전달
-	// TODO: 물리엔진 완성되면 useCamera 안의 TODO 부분만 교체하면 됩니다
-	const handleFrame = useCallback(
-		(result: PhysicsResult | null) => {
-			drawAR(result);
-		},
-		[drawAR],
-	);
+    const { isARMode, toggleARMode, drawAR } = useAR({
+        arCanvasRef,
+        minimapCanvasRef,
+        containerRef,
+    });
 
-	// 카메라 훅: 프레임 캡처 + OpenCV 공 감지
-	const { cvLoaded, errorMsg } = useCamera({
-		videoCanvasRef,
-		debugView,
-		onFrame: handleFrame,
-	});
+    const handleFrame = useCallback(
+        (result: PhysicsResult | null) => {
+            drawAR(result);
+        },
+        [drawAR],
+    );
 
-	return (
-		<div ref={containerRef} className={styles.container}>
-			{/* 레이어 1: 카메라 영상 */}
-			<canvas ref={videoCanvasRef} className={styles.videoCanvas} />
+    // ✨ 테스트 데이터를 useCamera 훅으로 전달
+    const { cvLoaded, errorMsg } = useCamera({
+        videoCanvasRef,
+        debugView,
+        onFrame: handleFrame,
+        testProps: {
+            cue: testCue,
+            obj1: testObj1,
+            obj2: testObj2,
+            angle: testAngle,
+        }
+    });
 
-			{/* 레이어 2: OpenCV 로딩 오버레이 */}
-			{!cvLoaded && (
-				<div className={styles.loadingOverlay}>
-					<div className={styles.spinner} />
-					<p className={styles.loadingText}>AI 비전 엔진 로딩 중...</p>
-				</div>
-			)}
+    return (
+        <div ref={containerRef} className={styles.container}>
+            {/* 레이어 1~3: 카메라 영상 및 상태창 */}
+            <canvas ref={videoCanvasRef} className={styles.videoCanvas} />
+            {!cvLoaded && (
+                <div className={styles.loadingOverlay}>
+                    <div className={styles.spinner} />
+                    <p className={styles.loadingText}>AI 비전 엔진 로딩 중...</p>
+                </div>
+            )}
+            {errorMsg && <div className={styles.error}>{errorMsg}</div>}
 
-			{/* 레이어 3: 에러 메시지 */}
-			{errorMsg && <div className={styles.error}>{errorMsg}</div>}
+            {/* 레이어 4: AR 궤적 오버레이 */}
+            <canvas ref={arCanvasRef} className={styles.arCanvas} />
 
-			{/* 레이어 4: AR 궤적 오버레이 */}
-			<canvas ref={arCanvasRef} className={styles.arCanvas} />
+            {/* 레이어 5: 상단 헤더 */}
+            <div className={styles.header}>
+                <div>
+                    <h1 className={styles.title}>Cue<span className={styles.titleAccent}>bit</span></h1>
+                    <p className={styles.subtitle}>Real-time Trajectory</p>
+                </div>
+                {isARMode && cvLoaded && (
+                    <div className={styles.analyzingBadge}>
+                        <div className={styles.analyzingDot} />
+                        <span className={styles.analyzingText}>실시간 분석 중...</span>
+                    </div>
+                )}
+            </div>
 
-			{/* 레이어 5: 상단 헤더 */}
-			<div className={styles.header}>
-				<div>
-					<h1 className={styles.title}>
-						Cue<span className={styles.titleAccent}>bit</span>
-					</h1>
-					<p className={styles.subtitle}>Real-time Trajectory</p>
-				</div>
-				{isARMode && cvLoaded && (
-					<div className={styles.analyzingBadge}>
-						<div className={styles.analyzingDot} />
-						<span className={styles.analyzingText}>실시간 분석 중...</span>
-					</div>
-				)}
-			</div>
+            {/* 레이어 6: 미니맵 */}
+            <Minimap ref={minimapCanvasRef} visible={isARMode && cvLoaded} />
 
-			{/* 레이어 6: 미니맵 */}
-			<Minimap ref={minimapCanvasRef} visible={isARMode && cvLoaded} />
+            {/* 레이어 7: 하단 컨트롤 패널 */}
+            <div className={styles.controls}>
+                <DebugViewToggle current={debugView} onChange={setDebugView} />
+                <ARButton isARMode={isARMode} onClick={toggleARMode} />
+            </div>
 
-			{/* 레이어 7: 하단 컨트롤 패널 */}
-			<div className={styles.controls}>
-				<ModeToggle mode={mode} onChange={setMode} />
-				<DebugViewToggle current={debugView} onChange={setDebugView} />
-				<ARButton isARMode={isARMode} onClick={toggleARMode} />
-			</div>
+            {/* 레이어 8: 개발용 로그 패널 */}
+            <DevLog />
 
-			{/* 레이어 8: 개발용 로그 패널 (개발 환경에서만 표시) */}
-			<DevLog />
-		</div>
-	);
+            {/* ✨ 레이어 9: 테스트 컨트롤러 UI */}
+            <div style={{ position: "absolute", bottom: 100, left: 10, zIndex: 999, background: "rgba(0,0,0,0.8)", padding: "10px", borderRadius: "8px", color: "white", fontSize: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", width: "90%", maxWidth: "400px" }}>
+                <div>
+                    <strong style={{ display: "block", marginBottom: "5px" }}>⚪ 수구</strong>
+                    <label>X: <input type="range" min="0" max="1000" value={testCue.x} onChange={e => setTestCue({...testCue, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
+                    <label>Y: <input type="range" min="0" max="1000" value={testCue.y} onChange={e => setTestCue({...testCue, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
+                </div>
+                <div>
+                    <strong style={{ display: "block", marginBottom: "5px" }}>🔴 적구 1</strong>
+                    <label>X: <input type="range" min="0" max="1000" value={testObj1.x} onChange={e => setTestObj1({...testObj1, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
+                    <label>Y: <input type="range" min="0" max="1000" value={testObj1.y} onChange={e => setTestObj1({...testObj1, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
+                </div>
+                <div>
+                    <strong style={{ display: "block", marginBottom: "5px" }}>🟡 적구 2</strong>
+                    <label>X: <input type="range" min="0" max="1000" value={testObj2.x} onChange={e => setTestObj2({...testObj2, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
+                    <label>Y: <input type="range" min="0" max="1000" value={testObj2.y} onChange={e => setTestObj2({...testObj2, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
+                </div>
+                <div>
+                    <strong style={{ display: "block", marginBottom: "5px" }}>📐 각도 ({testAngle}도)</strong>
+                    <label><input type="range" min="0" max="360" value={testAngle} onChange={e => setTestAngle(Number(e.target.value))} style={{width: "100%", verticalAlign: "middle"}}/></label>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default Main;

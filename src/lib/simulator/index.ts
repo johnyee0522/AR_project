@@ -1,81 +1,75 @@
+// src/lib/simulator.ts
 import type { PhysicsResult, Point } from "@/types/physics";
 
-// 당구대 크기 (0~1000 좌표계)
-const TABLE_MIN = 0;
-const TABLE_MAX = 1000;
+const BALL_RADIUS = 15;
+const TABLE_SIZE = 1000;
 
-// 최대 쿠션 반사 횟수
-const MAX_BOUNCES = 5;
-
-/**
- * 임시 당구 궤적 시뮬레이터
- * 진짜 물리엔진 연동 전까지 사용하는 모듈.
- *
- * 입사각 = 반사각 원리로 공이 벽에 부딪힐 때마다
- * 꺾이는 지점(waypoint)을 계산해서 반환합니다.
- *
- * @param startPos 수구 현재 위치 (0~1000 좌표)
- * @param angleDeg 타격 각도 (0~360도, 오른쪽이 0도)
- * @returns PhysicsResult — waypoints 배열
- */
 export function simulateTrajectory(
-	startPos: Point,
-	angleDeg: number,
+    cue: Point, 
+    angleDeg: number, 
+    objects: Point[]
 ): PhysicsResult {
-	const waypoints: Point[] = [startPos];
+    const waypoints: Point[] = [cue];
+    let current = { ...cue };
+    let angleRad = (angleDeg * Math.PI) / 180;
 
-	// 각도를 라디안으로 변환
-	let angleRad = (angleDeg * Math.PI) / 180;
+    for (let bounce = 0; bounce < 5; bounce++) {
+        const dx = Math.cos(angleRad);
+        const dy = Math.sin(angleRad);
 
-	let current = { ...startPos };
+        let tMin = Infinity;
+        let hitType: 'wall_x' | 'wall_y' | 'ball' | null = null;
+        let hitBallIdx = -1;
 
-	for (let i = 0; i < MAX_BOUNCES; i++) {
-		// 현재 방향 벡터
-		const dx = Math.cos(angleRad);
-		const dy = Math.sin(angleRad);
+        // 1. 벽 충돌 확인
+        if (dx > 0) { const t = (TABLE_SIZE - current.x) / dx; if(t < tMin) { tMin = t; hitType = 'wall_x'; } }
+        if (dx < 0) { const t = (0 - current.x) / dx; if(t < tMin) { tMin = t; hitType = 'wall_x'; } }
+        if (dy > 0) { const t = (TABLE_SIZE - current.y) / dy; if(t < tMin) { tMin = t; hitType = 'wall_y'; } }
+        if (dy < 0) { const t = (0 - current.y) / dy; if(t < tMin) { tMin = t; hitType = 'wall_y'; } }
 
-		// 각 벽까지의 거리 계산
-		const times: { t: number; axis: "x" | "y" }[] = [];
+        // 2. 모든 적구와 충돌 확인 (배열 순회)
+        objects.forEach((obj, idx) => {
+            const L = { x: obj.x - current.x, y: obj.y - current.y };
+            const tca = L.x * dx + L.y * dy;
+            if (tca < 0) return;
+            const d2 = (L.x * L.x + L.y * L.y) - (tca * tca);
+            const r2 = (BALL_RADIUS * 2) ** 2;
+            if (d2 > r2) return;
+            const thc = Math.sqrt(r2 - d2);
+            const t0 = tca - thc;
+            if (t0 > 0.01 && t0 < tMin) {
+                tMin = t0;
+                hitType = 'ball';
+                hitBallIdx = idx;
+            }
+        });
 
-		if (dx > 0) times.push({ t: (TABLE_MAX - current.x) / dx, axis: "x" });
-		if (dx < 0) times.push({ t: (TABLE_MIN - current.x) / dx, axis: "x" });
-		if (dy > 0) times.push({ t: (TABLE_MAX - current.y) / dy, axis: "y" });
-		if (dy < 0) times.push({ t: (TABLE_MIN - current.y) / dy, axis: "y" });
+        if (tMin === Infinity) break;
 
-		// 가장 먼저 부딪히는 벽 찾기
-		const hit = times
-			.filter((t) => t.t > 0.01)
-			.sort((a, b) => a.t - b.t)[0];
+        // 위치 업데이트
+        current = { x: current.x + dx * tMin, y: current.y + dy * tMin };
+        waypoints.push({ ...current });
 
-		if (!hit) break;
+        // 반사각 계산
+        if (hitType === 'wall_x') angleRad = Math.PI - angleRad;
+        else if (hitType === 'wall_y') angleRad = -angleRad;
+        else if (hitType === 'ball') {
+            const hitBall = objects[hitBallIdx];
+            const nx = (current.x - hitBall.x) / (BALL_RADIUS * 2);
+            const ny = (current.y - hitBall.y) / (BALL_RADIUS * 2);
+            const dot = dx * nx + dy * ny;
+            angleRad = Math.atan2(dy - 2 * dot * ny, dx - 2 * dot * nx);
+        }
+    }
 
-		// 충돌 지점 계산
-		const hitPoint: Point = {
-			x: Math.round(current.x + dx * hit.t),
-			y: Math.round(current.y + dy * hit.t),
-		};
+    // 화면에 적구(빨간공, 노란공)들도 렌더링되게 가만히 있는 점을 찍어 반환합니다.
+    const trajectories = [{ ballId: "cue", waypoints }];
+    objects.forEach((obj, idx) => {
+        trajectories.push({
+            ballId: idx === 0 ? "red" : "yellow", // 첫 번째 적구는 빨강, 두 번째는 노랑
+            waypoints: [obj, { x: obj.x + 0.1, y: obj.y + 0.1 }] // 정지 상태
+        });
+    });
 
-		// 벽 범위 내로 클램핑
-		hitPoint.x = Math.max(TABLE_MIN, Math.min(TABLE_MAX, hitPoint.x));
-		hitPoint.y = Math.max(TABLE_MIN, Math.min(TABLE_MAX, hitPoint.y));
-
-		waypoints.push(hitPoint);
-		current = hitPoint;
-
-		// 반사각 계산 (입사각 = 반사각)
-		if (hit.axis === "x") {
-			angleRad = Math.PI - angleRad; // 좌우 벽 반사
-		} else {
-			angleRad = -angleRad; // 상하 벽 반사
-		}
-	}
-
-	return {
-		trajectories: [
-			{
-				ballId: "cue",
-				waypoints,
-			},
-		],
-	};
+    return { trajectories };
 }
