@@ -1,4 +1,3 @@
-// src/app/routes/main/index.tsx
 import { useRef, useCallback, useState } from "react";
 import type { PhysicsResult } from "@/types/physics";
 import type { DebugView } from "@/lib/cuebit";
@@ -8,6 +7,7 @@ import ARButton from "@/components/ARButton/ARButton";
 import Minimap from "@/components/Minimap/Minimap";
 import DebugViewToggle from "@/components/DebugViewToggle/DebugViewToggle";
 import DevLog from "@/components/DevLog/DevLog";
+import TestController from "@/components/TestController/TestController";
 import styles from "./Main.module.css";
 
 function Main() {
@@ -17,11 +17,9 @@ function Main() {
     const containerRef = useRef<HTMLDivElement>(null);
 
     const [debugView, setDebugView] = useState<DebugView>("original");
-
-    // ✨ 패널 숨기기/보이기 상태값 (초기값: 숨김)
     const [showTestPanel, setShowTestPanel] = useState(false);
 
-    // 공 3개와 각도를 조작하기 위한 테스트 상태값
+    // 공 3개와 각도 상태 관리
     const [testCue, setTestCue] = useState({ x: 200, y: 750 });
     const [testObj1, setTestObj1] = useState({ x: 500, y: 500 });
     const [testObj2, setTestObj2] = useState({ x: 700, y: 300 });
@@ -54,20 +52,29 @@ function Main() {
 
     return (
         <div ref={containerRef} className={styles.container}>
-            {/* 레이어 1~6 생략 (기존과 동일) */}
+            {/* 레이어 1: 카메라 영상 */}
             <canvas ref={videoCanvasRef} className={styles.videoCanvas} />
+
+            {/* 레이어 2: 로딩 오버레이 */}
             {!cvLoaded && (
                 <div className={styles.loadingOverlay}>
                     <div className={styles.spinner} />
                     <p className={styles.loadingText}>AI 비전 엔진 로딩 중...</p>
                 </div>
             )}
+
+            {/* 레이어 3: 에러 메시지 */}
             {errorMsg && <div className={styles.error}>{errorMsg}</div>}
+
+            {/* 레이어 4: AR 궤적 오버레이 */}
             <canvas ref={arCanvasRef} className={styles.arCanvas} />
             
+            {/* 레이어 5: 상단 헤더 */}
             <div className={styles.header}>
                 <div>
-                    <h1 className={styles.title}>Cue<span className={styles.titleAccent}>bit</span></h1>
+                    <h1 className={styles.title}>
+                        Cue<span className={styles.titleAccent}>bit</span>
+                    </h1>
                     <p className={styles.subtitle}>Real-time Trajectory</p>
                 </div>
                 {isARMode && cvLoaded && (
@@ -80,23 +87,15 @@ function Main() {
 
             <Minimap ref={minimapCanvasRef} visible={isARMode && cvLoaded} />
 
-            {/* 레이어 7: 하단 컨트롤 패널 */}
+            {/* 레이어 7: 하단 컨트롤 섹션 */}
             <div className={styles.controls}>
-                {/* ✨ 디버그 토글 옆에 '테스트 설정' 버튼 추가 */}
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", justifyContent: "center" }}>
+                <div className={styles.buttonRow}>
                     <DebugViewToggle current={debugView} onChange={setDebugView} />
+                    
+                    {/* 설정 패널 토글 버튼 */}
                     <button 
+                        className={`${styles.configButton} ${showTestPanel ? styles.active : ""}`}
                         onClick={() => setShowTestPanel(!showTestPanel)}
-                        style={{
-                            padding: "8px 12px",
-                            backgroundColor: showTestPanel ? "#ff4757" : "#3742fa",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "8px",
-                            fontWeight: "bold",
-                            cursor: "pointer",
-                            boxShadow: "0 4px 6px rgba(0,0,0,0.3)"
-                        }}
                     >
                         ⚙️ 설정 {showTestPanel ? "닫기" : "열기"}
                     </button>
@@ -104,48 +103,21 @@ function Main() {
                 <ARButton isARMode={isARMode} onClick={toggleARMode} />
             </div>
 
+            {/* 레이어 8: 개발 로그 */}
             <DevLog />
 
-            {/* ✨ 레이어 9: 테스트 컨트롤러 UI (showTestPanel이 true일 때만 보임) */}
-            {showTestPanel && (
-                <div style={{ 
-                    position: "absolute", 
-                    bottom: 160, // ✨ 위로 살짝 올림 (기존 100 -> 160)
-                    left: 10, 
-                    zIndex: 999, 
-                    background: "rgba(0,0,0,0.4)", // ✨ 반투명하게 변경 (기존 0.8 -> 0.4)
-                    backdropFilter: "blur(5px)", // ✨ 뒤 배경이 살짝 흐리게 비쳐서 훨씬 고급스러워짐
-                    padding: "10px", 
-                    borderRadius: "8px", 
-                    color: "white", 
-                    fontSize: "12px", 
-                    display: "grid", 
-                    gridTemplateColumns: "1fr 1fr", 
-                    gap: "10px", 
-                    width: "90%", 
-                    maxWidth: "400px" 
-                }}>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>⚪ 수구</strong>
-                        <label>X: <input type="range" min="0" max="1000" value={testCue.x} onChange={e => setTestCue({...testCue, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
-                        <label>Y: <input type="range" min="0" max="1000" value={testCue.y} onChange={e => setTestCue({...testCue, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
-                    </div>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>🔴 적구 1</strong>
-                        <label>X: <input type="range" min="0" max="1000" value={testObj1.x} onChange={e => setTestObj1({...testObj1, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
-                        <label>Y: <input type="range" min="0" max="1000" value={testObj1.y} onChange={e => setTestObj1({...testObj1, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
-                    </div>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>🟡 적구 2</strong>
-                        <label>X: <input type="range" min="0" max="1000" value={testObj2.x} onChange={e => setTestObj2({...testObj2, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
-                        <label>Y: <input type="range" min="0" max="1000" value={testObj2.y} onChange={e => setTestObj2({...testObj2, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
-                    </div>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>📐 각도 ({testAngle}도)</strong>
-                        <label><input type="range" min="0" max="360" value={testAngle} onChange={e => setTestAngle(Number(e.target.value))} style={{width: "100%", verticalAlign: "middle"}}/></label>
-                    </div>
-                </div>
-            )}
+            {/* 레이어 9: 테스트 컨트롤러 패널 (분리된 외부 컴포넌트) */}
+            <TestController 
+                show={showTestPanel}
+                testCue={testCue}
+                setTestCue={setTestCue}
+                testObj1={testObj1}
+                setTestObj1={setTestObj1}
+                testObj2={testObj2}
+                setTestObj2={setTestObj2}
+                testAngle={testAngle}
+                setTestAngle={setTestAngle}
+            />
         </div>
     );
 }
