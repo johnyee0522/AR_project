@@ -18,7 +18,6 @@ function Main() {
 
     const [debugView, setDebugView] = useState<DebugView>("original");
 
-    // ✨ 패널 숨기기/보이기 상태값 (초기값: 숨김)
     const [showTestPanel, setShowTestPanel] = useState(false);
 
     // 공 3개와 각도를 조작하기 위한 테스트 상태값
@@ -82,7 +81,6 @@ function Main() {
 
             {/* 레이어 7: 하단 컨트롤 패널 */}
             <div className={styles.controls}>
-                {/* ✨ 디버그 토글 옆에 '테스트 설정' 버튼 추가 */}
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", justifyContent: "center" }}>
                     <DebugViewToggle current={debugView} onChange={setDebugView} />
                     <button 
@@ -106,15 +104,14 @@ function Main() {
 
             <DevLog />
 
-            {/* ✨ 레이어 9: 테스트 컨트롤러 UI (showTestPanel이 true일 때만 보임) */}
             {showTestPanel && (
                 <div style={{ 
                     position: "absolute", 
-                    bottom: 160, // ✨ 위로 살짝 올림 (기존 100 -> 160)
+                    bottom: 160, 
                     left: 10, 
                     zIndex: 999, 
-                    background: "rgba(0,0,0,0.4)", // ✨ 반투명하게 변경 (기존 0.8 -> 0.4)
-                    backdropFilter: "blur(5px)", // ✨ 뒤 배경이 살짝 흐리게 비쳐서 훨씬 고급스러워짐
+                    background: "rgba(0,0,0,0.4)",
+                    backdropFilter: "blur(5px)",
                     padding: "10px", 
                     borderRadius: "8px", 
                     color: "white", 
