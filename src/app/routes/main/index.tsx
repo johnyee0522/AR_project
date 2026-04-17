@@ -1,4 +1,3 @@
-// src/app/routes/main/index.tsx
 import { useRef, useCallback, useState } from "react";
 import type { DebugView } from "@/lib/cuebit";
 import useCamera, { type DetectedState } from "@/hooks/use_camera";
@@ -60,8 +59,7 @@ function Main() {
 			const { power, sideSpin, topBottomSpin } = gameState;
 
 			sim.updateBallPositions(balls);
-			
-			const physicsResult = sim.predict(angle, power, topBottomSpin, sideSpin, 300);
+			const physicsResult = sim.predict(angle, power, 300, sideSpin, topBottomSpin);
 
 			drawAR(physicsResult);
 		},
