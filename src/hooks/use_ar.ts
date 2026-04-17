@@ -81,8 +81,6 @@ function useAR({
 			const scaleX = minimapCanvas.width / canvas.width;
 			const scaleY = minimapCanvas.height / canvas.height;
 
-			// 물리적 충돌 지점과 일치시키기 위한 시각적 공 반지름 보정
-			const ballRadiusPx = (0.03075 / 2.84) * canvas.width * 2.0;
 			const minimapBallRadiusPx = (minimapCanvas.width / 70) * 3;
 
 			for (const trajectory of result.trajectories) {
