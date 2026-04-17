@@ -3,25 +3,24 @@ import { getOpenCv } from "../opencv";
 
 const { cv } = await getOpenCv();
 
-/** 디버그 뷰 종류 */
+/** 카메라 프로세싱을 위한 디버그 뷰 종류 */
 export type DebugView = "original" | "hsv" | "mask" | "contour";
 
-/** Cuebit.process()의 반환값 */
+/** 이미지 처리 결과 인터페이스 (디버그 프레임 및 감지된 좌표) */
 export interface CuebitResult {
 	/** 각 디버그 뷰의 RGBA 이미지 데이터 */
 	frames: Record<DebugView, Uint8ClampedArray<ArrayBuffer>>;
-	/** 감지된 공의 좌표 (없으면 null) */
-	ballPos: { x: number; y: number } | null;
+	/** 정규화 좌표계(0-1000)로 변환된 공 위치 */
+	detected: {
+		cue: { x: number; y: number } | null;
+		obj1: { x: number; y: number } | null;
+		obj2: { x: number; y: number } | null;
+		angle: number;
+	};
 }
 
 /**
- * 이미지 프로세싱을 담당하는 클래스
- *
- * process()를 호출하면 각 단계별 이미지와 공 위치를 반환합니다.
- * DebugView를 통해 각 단계를 화면에 표시할 수 있습니다.
- *
- * ⚠️ 사용이 끝나면 반드시 destroy()를 호출해주세요.
- *    OpenCV Mat은 C++ 기반 메모리를 사용하므로 GC가 자동으로 해제하지 않습니다.
+ * OpenCV를 이용한 이미지 프로세싱 및 공 감지 클래스
  */
 class Cuebit {
 	private mat: Mat;
@@ -29,12 +28,17 @@ class Cuebit {
 	private mask: Mat;
 	private contourOutput: Mat;
 
+	private width: number;
+	private height: number;
+
 	private frameOriginal: Uint8ClampedArray<ArrayBuffer>;
 	private frameHsv: Uint8ClampedArray<ArrayBuffer>;
 	private frameMask: Uint8ClampedArray<ArrayBuffer>;
 	private frameContour: Uint8ClampedArray<ArrayBuffer>;
 
 	constructor(width: number, height: number) {
+		this.width = width;
+		this.height = height;
 		this.mat = new cv.Mat(height, width, cv.CV_8UC4);
 		this.hsv = new cv.Mat(height, width, cv.CV_8UC3);
 		this.mask = new cv.Mat(height, width, cv.CV_8UC1);
@@ -46,104 +50,112 @@ class Cuebit {
 		this.frameContour = new Uint8ClampedArray(width * height * 4);
 	}
 
-	public process(data: Uint8ClampedArray): CuebitResult {
-		const pixels = data.length / 4;
+	/**
+	 * 특정 HSV 범위 내에서 공의 위치를 감지
+	 */
+	private findBall(
+		hsv: Mat,
+		low: number[],
+		high: number[],
+	): { x: number; y: number } | null {
+		const lowMat = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), low);
+		const highMat = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), high);
+		const mask = new cv.Mat();
 
-		// ── 뷰 1: 원본 ──────────────────────────────────────
-		this.frameOriginal.set(data);
+		cv.inRange(hsv, lowMat, highMat, mask);
 
-		// ── 뷰 2: HSV 변환 ───────────────────────────────────
-		this.mat.data.set(data);
-		cv.cvtColor(this.mat, this.hsv, cv.COLOR_RGBA2RGB);
-		cv.cvtColor(this.hsv, this.hsv, cv.COLOR_RGB2HSV);
-
-		const hsv = this.hsv.data;
-		for (let i = 0; i < pixels; i++) {
-			this.frameHsv[i * 4] = hsv[i * 3]; // H → R
-			this.frameHsv[i * 4 + 1] = hsv[i * 3 + 1]; // S → G
-			this.frameHsv[i * 4 + 2] = hsv[i * 3 + 2]; // V → B
-			this.frameHsv[i * 4 + 3] = 255;
-		}
-
-		// ── 뷰 3: 마스크 (빨간색 범위 추출) ────────────────────
-		// TODO: 당구장 환경에 맞게 HSV 범위 조정 필요
-		const lowRed = new cv.Mat(
-			this.hsv.rows,
-			this.hsv.cols,
-			this.hsv.type(),
-			[0, 120, 70, 0],
-		);
-		const highRed = new cv.Mat(
-			this.hsv.rows,
-			this.hsv.cols,
-			this.hsv.type(),
-			[10, 255, 255, 0],
-		);
-		cv.inRange(this.hsv, lowRed, highRed, this.mask);
-		lowRed.delete();
-		highRed.delete();
-
-		const mask = this.mask.data;
-		for (let i = 0; i < pixels; i++) {
-			const v = mask[i]; // 255(흰색) or 0(검정)
-			this.frameMask[i * 4] = v;
-			this.frameMask[i * 4 + 1] = v;
-			this.frameMask[i * 4 + 2] = v;
-			this.frameMask[i * 4 + 3] = 255;
-		}
-
-		// ── 뷰 4: 컨투어 (윤곽선 검출) + 공 위치 감지 ───────────
-		let ballPos: { x: number; y: number } | null = null;
+		// 모폴로지 연산을 이용한 노이즈 제거
+		const ksize = new cv.Size(3, 3);
+		const M = cv.getStructuringElement(cv.MORPH_RECT, ksize);
+		cv.morphologyEx(mask, mask, cv.MORPH_OPEN, M);
+		M.delete();
 
 		const contours = new cv.MatVector();
 		const hierarchy = new cv.Mat();
 		cv.findContours(
-			this.mask,
+			mask,
 			contours,
 			hierarchy,
 			cv.RETR_EXTERNAL,
 			cv.CHAIN_APPROX_SIMPLE,
 		);
 
-		// 원본 이미지 위에 컨투어를 그리기 위해 복사
-		this.mat.copyTo(this.contourOutput);
+		let pos: { x: number; y: number } | null = null;
+		let maxArea = 0;
 
-		if (contours.size() > 0) {
-			let maxArea = 0;
-			let maxIdx = -1;
-
-			for (let i = 0; i < contours.size(); i++) {
-				const cnt = contours.get(i);
-				const area = cv.contourArea(cnt);
-				if (area > maxArea) {
-					maxArea = area;
-					maxIdx = i;
-				}
-				cnt.delete();
-			}
-
-			// 노이즈 무시: 300px² 이상인 덩어리만 공으로 인식
-			if (maxArea > 300 && maxIdx !== -1) {
-				const maxContour = contours.get(maxIdx);
-
-				// 공 중심 좌표 계산 (모멘트 이용)
-				const moments = cv.moments(maxContour);
-				ballPos = {
-					x: moments.m10 / moments.m00,
-					y: moments.m01 / moments.m00,
+		for (let i = 0; i < contours.size(); i++) {
+			const cnt = contours.get(i);
+			const area = cv.contourArea(cnt);
+			if (area > maxArea && area > 100) {
+				maxArea = area;
+				const moments = cv.moments(cnt);
+				pos = {
+					x: (moments.m10 / moments.m00 / this.width) * 1000,
+					y: (moments.m01 / moments.m00 / this.height) * 1000,
 				};
 
-				// 감지된 컨투어를 초록색으로 그리기
-				const color = new cv.Scalar(0, 255, 0, 255);
-				cv.drawContours(this.contourOutput, contours, maxIdx, color, 2);
-				maxContour.delete();
+				// 디버깅용 외곽선 그리기
+				const color = new cv.Scalar(255, 255, 255, 255);
+				cv.drawContours(this.contourOutput, contours, i, color, 2);
+			}
+			cnt.delete();
+		}
+
+		// 마지막 마스크 상태를 디버그 뷰에 저장 (예: 빨간 공 마스크)
+		if (low[0] === 0) {
+			const maskData = mask.data;
+			for (let i = 0; i < maskData.length; i++) {
+				const v = maskData[i];
+				this.frameMask[i * 4] = v;
+				this.frameMask[i * 4 + 1] = v;
+				this.frameMask[i * 4 + 2] = v;
+				this.frameMask[i * 4 + 3] = 255;
 			}
 		}
 
+		mask.delete();
+		lowMat.delete();
+		highMat.delete();
 		contours.delete();
 		hierarchy.delete();
 
-		// contourOutput(RGBA)을 frameContour에 복사
+		return pos;
+	}
+
+	/**
+	 * 이미지 데이터를 처리하여 공 위치를 감지하고 디버그 프레임을 생성
+	 * @param data RGBA 이미지 버퍼
+	 */
+	public process(data: Uint8ClampedArray): CuebitResult {
+		this.frameOriginal.set(data);
+		this.mat.data.set(data);
+
+		// 색상 공간 변환: RGBA -> RGB -> HSV
+		cv.cvtColor(this.mat, this.hsv, cv.COLOR_RGBA2RGB);
+		cv.cvtColor(this.hsv, this.hsv, cv.COLOR_RGB2HSV);
+
+		// 디버그용 HSV 데이터 복사
+		const hsvData = this.hsv.data;
+		for (let i = 0; i < hsvData.length / 3; i++) {
+			this.frameHsv[i * 4] = hsvData[i * 3];
+			this.frameHsv[i * 4 + 1] = hsvData[i * 3 + 1];
+			this.frameHsv[i * 4 + 2] = hsvData[i * 3 + 2];
+			this.frameHsv[i * 4 + 3] = 255;
+		}
+
+		this.mat.copyTo(this.contourOutput);
+
+		// 일반적인 HSV 범위를 사용하여 공 감지
+		const redPos =
+			this.findBall(this.hsv, [0, 150, 100, 0], [10, 255, 255, 0]) ||
+			this.findBall(this.hsv, [160, 150, 100, 0], [180, 255, 255, 0]);
+		const yellowPos = this.findBall(
+			this.hsv,
+			[20, 100, 100, 0],
+			[35, 255, 255, 0],
+		);
+		const whitePos = this.findBall(this.hsv, [0, 0, 180, 0], [180, 50, 255, 0]);
+
 		this.frameContour.set(this.contourOutput.data);
 
 		return {
@@ -153,13 +165,17 @@ class Cuebit {
 				mask: this.frameMask,
 				contour: this.frameContour,
 			},
-			ballPos,
+			detected: {
+				cue: whitePos,
+				obj1: redPos,
+				obj2: yellowPos,
+				angle: 45, // 큐대 인식 로직 구현 전 임시값
+			},
 		};
 	}
 
 	/**
-	 * OpenCV Mat 메모리 해제
-	 * 카메라 스트림 종료 시 반드시 호출해야 합니다.
+	 * OpenCV Mat 리소스 해제. 카메라 스트림 종료 시 호출 필수.
 	 */
 	public destroy(): void {
 		this.mat.delete();

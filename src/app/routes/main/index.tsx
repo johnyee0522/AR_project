@@ -1,150 +1,173 @@
-// src/app/routes/main/index.tsx
 import { useRef, useCallback, useState } from "react";
-import type { PhysicsResult } from "@/types/physics";
 import type { DebugView } from "@/lib/cuebit";
-import useCamera from "@/hooks/useCamera";
-import useAR from "@/hooks/useAR";
-import ARButton from "@/components/ARButton/ARButton";
-import Minimap from "@/components/Minimap/Minimap";
-import DebugViewToggle from "@/components/DebugViewToggle/DebugViewToggle";
-import DevLog from "@/components/DevLog/DevLog";
-import styles from "./Main.module.css";
+import useCamera, { type DetectedState } from "@/hooks/use_camera";
+import useAR from "@/hooks/use_ar";
+import useSimulation from "@/hooks/use_simulation";
+import ARButton from "@/components/ar_button/ar_button";
+import Minimap from "@/components/minimap/minimap";
+import DebugViewToggle from "@/components/debug_view_toggle/debug_view_toggle";
+import DevLog from "@/components/dev_log/dev_log";
+import TestPanel from "./test_panel";
+import styles from "./main.module.css";
 
+/**
+ * 메인 애플리케이션 화면: 카메라 비전, 물리 시뮬레이션 및 AR 오버레이 통합
+ */
 function Main() {
-    const videoCanvasRef = useRef<HTMLCanvasElement>(null);
-    const arCanvasRef = useRef<HTMLCanvasElement>(null);
-    const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+	const videoCanvasRef = useRef<HTMLCanvasElement>(null);
+	const arCanvasRef = useRef<HTMLCanvasElement>(null);
+	const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
 
-    const [debugView, setDebugView] = useState<DebugView>("original");
+	const [debugView, setDebugView] = useState<DebugView>("original");
 
-    const [showTestPanel, setShowTestPanel] = useState(false);
+	// 시뮬레이션 파라미터를 위한 게임 상태
+	const [gameState, setGameState] = useState({
+		balls: {
+			cue: { x: 200, y: 750 },
+			red: { x: 500, y: 500 },
+			yellow: { x: 700, y: 300 },
+		},
+		angle: 45,
+		power: 1.5,
+	});
+	const [isTestPanelOpen, setIsTestPanelOpen] = useState(true);
 
-    // 공 3개와 각도를 조작하기 위한 테스트 상태값
-    const [testCue, setTestCue] = useState({ x: 200, y: 750 });
-    const [testObj1, setTestObj1] = useState({ x: 500, y: 500 });
-    const [testObj2, setTestObj2] = useState({ x: 700, y: 300 });
-    const [testAngle, setTestAngle] = useState(45);
+	const { isARMode, toggleARMode, drawAR } = useAR({
+		arCanvasRef,
+		minimapCanvasRef,
+		containerRef,
+	});
 
-    const { isARMode, toggleARMode, drawAR } = useAR({
-        arCanvasRef,
-        minimapCanvasRef,
-        containerRef,
-    });
+	const { sim } = useSimulation();
 
-    const handleFrame = useCallback(
-        (result: PhysicsResult | null) => {
-            drawAR(result);
-        },
-        [drawAR],
-    );
+	/**
+	 * 각 카메라 프레임 처리: 물리 월드 업데이트 및 AR 시각화 드로잉
+	 */
+	const handleFrame = useCallback(
+		(detected: DetectedState | null) => {
+			if (!sim) {
+				drawAR(null);
+				return;
+			}
 
-    const { cvLoaded, errorMsg } = useCamera({
-        videoCanvasRef,
-        debugView,
-        onFrame: handleFrame,
-        testProps: {
-            cue: testCue,
-            obj1: testObj1,
-            obj2: testObj2,
-            angle: testAngle,
-        }
-    });
+			// 비전 엔진에서 감지된 공 위치를 수동 설정값보다 우선시함
+			const balls = detected?.balls || gameState.balls;
+			const angle = detected?.angle ?? gameState.angle;
+			const power = gameState.power;
 
-    return (
-        <div ref={containerRef} className={styles.container}>
-            {/* 레이어 1~6 생략 (기존과 동일) */}
-            <canvas ref={videoCanvasRef} className={styles.videoCanvas} />
-            {!cvLoaded && (
-                <div className={styles.loadingOverlay}>
-                    <div className={styles.spinner} />
-                    <p className={styles.loadingText}>AI 비전 엔진 로딩 중...</p>
-                </div>
-            )}
-            {errorMsg && <div className={styles.error}>{errorMsg}</div>}
-            <canvas ref={arCanvasRef} className={styles.arCanvas} />
-            
-            <div className={styles.header}>
-                <div>
-                    <h1 className={styles.title}>Cue<span className={styles.titleAccent}>bit</span></h1>
-                    <p className={styles.subtitle}>Real-time Trajectory</p>
-                </div>
-                {isARMode && cvLoaded && (
-                    <div className={styles.analyzingBadge}>
-                        <div className={styles.analyzingDot} />
-                        <span className={styles.analyzingText}>실시간 분석 중...</span>
-                    </div>
-                )}
-            </div>
+			sim.updateBallPositions(balls);
+			const physicsResult = sim.predict(angle, power);
 
-            <Minimap ref={minimapCanvasRef} visible={isARMode && cvLoaded} />
+			drawAR(physicsResult);
+		},
+		[drawAR, sim, gameState],
+	);
 
-            {/* 레이어 7: 하단 컨트롤 패널 */}
-            <div className={styles.controls}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", justifyContent: "center" }}>
-                    <DebugViewToggle current={debugView} onChange={setDebugView} />
-                    <button 
-                        onClick={() => setShowTestPanel(!showTestPanel)}
-                        style={{
-                            padding: "8px 12px",
-                            backgroundColor: showTestPanel ? "#ff4757" : "#3742fa",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "8px",
-                            fontWeight: "bold",
-                            cursor: "pointer",
-                            boxShadow: "0 4px 6px rgba(0,0,0,0.3)"
-                        }}
-                    >
-                        ⚙️ 설정 {showTestPanel ? "닫기" : "열기"}
-                    </button>
-                </div>
-                <ARButton isARMode={isARMode} onClick={toggleARMode} />
-            </div>
+	const { cvLoaded, errorMsg } = useCamera({
+		videoCanvasRef,
+		debugView,
+		onFrame: handleFrame,
+		testProps: {
+			cue: gameState.balls.cue,
+			obj1: gameState.balls.red,
+			obj2: gameState.balls.yellow,
+			angle: gameState.angle,
+		},
+	});
 
-            <DevLog />
+	return (
+		<div ref={containerRef} className={styles.container}>
+			<canvas ref={videoCanvasRef} className={styles.videoCanvas} />
 
-            {showTestPanel && (
-                <div style={{ 
-                    position: "absolute", 
-                    bottom: 160, 
-                    left: 10, 
-                    zIndex: 999, 
-                    background: "rgba(0,0,0,0.4)",
-                    backdropFilter: "blur(5px)",
-                    padding: "10px", 
-                    borderRadius: "8px", 
-                    color: "white", 
-                    fontSize: "12px", 
-                    display: "grid", 
-                    gridTemplateColumns: "1fr 1fr", 
-                    gap: "10px", 
-                    width: "90%", 
-                    maxWidth: "400px" 
-                }}>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>⚪ 수구</strong>
-                        <label>X: <input type="range" min="0" max="1000" value={testCue.x} onChange={e => setTestCue({...testCue, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
-                        <label>Y: <input type="range" min="0" max="1000" value={testCue.y} onChange={e => setTestCue({...testCue, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
-                    </div>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>🔴 적구 1</strong>
-                        <label>X: <input type="range" min="0" max="1000" value={testObj1.x} onChange={e => setTestObj1({...testObj1, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
-                        <label>Y: <input type="range" min="0" max="1000" value={testObj1.y} onChange={e => setTestObj1({...testObj1, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
-                    </div>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>🟡 적구 2</strong>
-                        <label>X: <input type="range" min="0" max="1000" value={testObj2.x} onChange={e => setTestObj2({...testObj2, x: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label><br/>
-                        <label>Y: <input type="range" min="0" max="1000" value={testObj2.y} onChange={e => setTestObj2({...testObj2, y: Number(e.target.value)})} style={{width: "70px", verticalAlign: "middle"}}/></label>
-                    </div>
-                    <div>
-                        <strong style={{ display: "block", marginBottom: "5px" }}>📐 각도 ({testAngle}도)</strong>
-                        <label><input type="range" min="0" max="360" value={testAngle} onChange={e => setTestAngle(Number(e.target.value))} style={{width: "100%", verticalAlign: "middle"}}/></label>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+			{/* 로딩 오버레이 */}
+			{!cvLoaded && (
+				<div className={styles.loadingOverlay}>
+					<div className={styles.spinner} />
+					<p className={styles.loadingText}>AI 비전 엔진 로딩 중...</p>
+				</div>
+			)}
+
+			{errorMsg && <div className={styles.error}>{errorMsg}</div>}
+
+			<canvas ref={arCanvasRef} className={styles.arCanvas} />
+
+			<div className={styles.header}>
+				<div>
+					<h1 className={styles.title}>
+						Cue<span className={styles.titleAccent}>bit</span>
+					</h1>
+					<p className={styles.subtitle}>실시간 궤적 가이드</p>
+				</div>
+				{isARMode && cvLoaded && (
+					<div className={styles.analyzingBadge}>
+						<div className={styles.analyzingDot} />
+						<span className={styles.analyzingText}>실시간 분석 중...</span>
+					</div>
+				)}
+			</div>
+
+			<Minimap ref={minimapCanvasRef} visible={isARMode && cvLoaded} />
+
+			{isTestPanelOpen && (
+				<TestPanel
+					cue={gameState.balls.cue}
+					obj1={gameState.balls.red}
+					obj2={gameState.balls.yellow}
+					angle={gameState.angle}
+					power={gameState.power}
+					onCueChange={(pos) =>
+						setGameState((prev) => ({
+							...prev,
+							balls: { ...prev.balls, cue: pos },
+						}))
+					}
+					onObj1Change={(pos) =>
+						setGameState((prev) => ({
+							...prev,
+							balls: { ...prev.balls, red: pos },
+						}))
+					}
+					onObj2Change={(pos) =>
+						setGameState((prev) => ({
+							...prev,
+							balls: { ...prev.balls, yellow: pos },
+						}))
+					}
+					onAngleChange={(angle) =>
+						setGameState((prev) => ({ ...prev, angle }))
+					}
+					onPowerChange={(power) =>
+						setGameState((prev) => ({ ...prev, power }))
+					}
+					onClose={() => setIsTestPanelOpen(false)}
+				/>
+			)}
+
+			<div className={styles.controls}>
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: "10px",
+						marginBottom: "10px",
+						justifyContent: "center",
+					}}
+				>
+					<button
+						className={styles.openTestBtn}
+						onClick={() => setIsTestPanelOpen((prev) => !prev)}
+					>
+						{isTestPanelOpen ? "닫기" : "테스트 패널"}
+					</button>
+					<DebugViewToggle current={debugView} onChange={setDebugView} />
+				</div>
+				<ARButton isARMode={isARMode} onClick={toggleARMode} />
+			</div>
+
+			<DevLog />
+		</div>
+	);
 }
 
 export default Main;

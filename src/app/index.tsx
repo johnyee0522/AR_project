@@ -1,16 +1,15 @@
 import AppProvider from "./provider";
-import TestController from '@/components/test_controller/test_controller';
-// import AppRouter from "./router"; // 잠시 라우터 끄기
+import AppRouter from "./router";
 
+/**
+ * 애플리케이션 최상위 컴포넌트
+ */
 function App() {
-    return (
-        <AppProvider>
-            {/* 테스트용 UI 화면 중앙 띄우기 */}
-            <div style={{ width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
-                <TestController />
-            </div>
-        </AppProvider>
-    );
+	return (
+		<AppProvider>
+			<AppRouter />
+		</AppProvider>
+	);
 }
 
 export default App;

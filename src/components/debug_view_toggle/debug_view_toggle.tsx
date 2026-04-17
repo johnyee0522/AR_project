@@ -1,5 +1,5 @@
 import type { DebugView } from "@/lib/cuebit";
-import styles from "./DebugViewToggle.module.css";
+import styles from "./debug_view_toggle.module.css";
 
 interface DebugViewToggleProps {
 	/** 현재 선택된 디버그 뷰 */
@@ -16,8 +16,7 @@ const VIEWS: { id: DebugView; label: string }[] = [
 ];
 
 /**
- * 디버그 뷰 전환 토글
- * 각 버튼을 누르면 카메라 화면이 해당 처리 단계로 바뀜
+ * 컴퓨터 비전 처리 단계별 디버그 뷰 전환 토글
  */
 function DebugViewToggle({ current, onChange }: DebugViewToggleProps) {
 	return (

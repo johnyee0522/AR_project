@@ -5,22 +5,30 @@ import { getOpenCv } from "@/lib/opencv";
 import Cuebit from "@/lib/cuebit";
 import type { DebugView } from "@/lib/cuebit";
 import { todo } from "@/common";
-import type { PhysicsResult, Point } from "@/types/physics";
-import { simulateTrajectory } from "@/lib/simulator";
+import type { Point } from "@/types/physics";
 import logger from "@/lib/logger";
 
-interface TestProps {
-	cue: Point;
-	obj1: Point;
-	obj2: Point;
+export interface DetectedState {
+	balls: {
+		cue: Point;
+		red: Point;
+		yellow: Point;
+	};
 	angle: number;
 }
 
 interface UseCameraOptions {
 	videoCanvasRef: RefObject<HTMLCanvasElement | null>;
 	debugView: DebugView;
-	onFrame: (result: PhysicsResult | null) => void;
-	testProps: TestProps;
+	/** 감지된 공 위치를 포함한 프레임 처리 콜백 */
+	onFrame: (detected: DetectedState | null) => void;
+	/** 개발 및 테스트 모드용 기본 위치값 */
+	testProps: {
+		cue: Point;
+		obj1: Point;
+		obj2: Point;
+		angle: number;
+	};
 }
 
 interface UseCameraReturn {
@@ -28,6 +36,9 @@ interface UseCameraReturn {
 	errorMsg: string;
 }
 
+/**
+ * 카메라 스트림 관리 및 공 감지 프로세싱을 담당하는 훅
+ */
 function useCamera({
 	videoCanvasRef,
 	debugView,
@@ -38,13 +49,19 @@ function useCamera({
 	const [errorMsg, setErrorMsg] = useState("");
 
 	const debugViewRef = useRef<DebugView>(debugView);
-	useEffect(() => { debugViewRef.current = debugView; }, [debugView]);
+	useEffect(() => {
+		debugViewRef.current = debugView;
+	}, [debugView]);
 
 	const onFrameRef = useRef(onFrame);
-	useEffect(() => { onFrameRef.current = onFrame; }, [onFrame]);
+	useEffect(() => {
+		onFrameRef.current = onFrame;
+	}, [onFrame]);
 
-	const testPropsRef = useRef<TestProps>(testProps);
-	useEffect(() => { testPropsRef.current = testProps; }, [testProps]);
+	const testPropsRef = useRef(testProps);
+	useEffect(() => {
+		testPropsRef.current = testProps;
+	}, [testProps]);
 
 	const createFrameDrawer = useCallback(
 		(canvas: HTMLCanvasElement, width: number, height: number) => {
@@ -54,7 +71,11 @@ function useCamera({
 			if (!context) throw new Error("Failed to get canvas context");
 			return {
 				draw: (data: Uint8ClampedArray<ArrayBuffer>) => {
-					context.putImageData(new ImageData(data, canvas.width, canvas.height), 0, 0);
+					context.putImageData(
+						new ImageData(data, canvas.width, canvas.height),
+						0,
+						0,
+					);
 				},
 			};
 		},
@@ -63,33 +84,36 @@ function useCamera({
 
 	useEffect(() => {
 		const ac = new AbortController();
-		let rAFId: number;                  // 프레임 취소 식별자
-		let activeStream: MediaStream;      // 카메라 스트림 저장용
+		let rAFId: number;
+		let activeStream: MediaStream;
 
 		const startCamera = async () => {
-			// [DEV 모드]
+			// 개발 환경에서는 실제 카메라 없이 시뮬레이터 모드로 실행
 			if (import.meta.env.DEV) {
 				setCvLoaded(true);
-				logger.info("[DEV] 카메라 없이 시뮬레이터 모드로 실행");
+				logger.info("[DEV] 카메라 없이 시뮬레이터 모드로 실행 중");
 
 				const loop = () => {
 					if (ac.signal.aborted) return;
-					const { cue, obj1, obj2, angle } = testPropsRef.current;
-					const result = simulateTrajectory(cue, angle, [obj1, obj2]);
-					onFrameRef.current(result);
+					onFrameRef.current({
+						balls: {
+							cue: testPropsRef.current.cue,
+							red: testPropsRef.current.obj1,
+							yellow: testPropsRef.current.obj2,
+						},
+						angle: testPropsRef.current.angle,
+					});
 					rAFId = requestAnimationFrame(loop);
 				};
 				rAFId = requestAnimationFrame(loop);
 				return;
 			}
 
-			// [PROD 모드]
 			try {
 				logger.info("카메라 스트림 요청 중...");
 				activeStream = await navigator.mediaDevices.getUserMedia({
 					audio: false,
 					video: {
-						// 표준 해상도(FHD)를 ideal로 주어 디바이스 환경에 맞게 유연하게 획득
 						width: { ideal: 1920 },
 						height: { ideal: 1080 },
 						facingMode: { ideal: "environment" },
@@ -100,9 +124,16 @@ function useCamera({
 				const [track] = activeStream.getVideoTracks();
 				const frameCapture = await createFrameCapture(ac.signal, track);
 
-				const buffer = new Uint8ClampedArray(frameCapture.width * frameCapture.height * 4);
-				const canvas: HTMLCanvasElement = videoCanvasRef.current ?? todo("canvas가 없음");
-				const drawer = createFrameDrawer(canvas, frameCapture.width, frameCapture.height);
+				const buffer = new Uint8ClampedArray(
+					frameCapture.width * frameCapture.height * 4,
+				);
+				const canvas: HTMLCanvasElement =
+					videoCanvasRef.current ?? todo("Canvas를 찾을 수 없음");
+				const drawer = createFrameDrawer(
+					canvas,
+					frameCapture.width,
+					frameCapture.height,
+				);
 
 				await getOpenCv();
 				setCvLoaded(true);
@@ -116,12 +147,22 @@ function useCamera({
 						layout: [{ offset: 0, stride: frameCapture.width * 4 }],
 					});
 
-					const { frames } = cuebit.process(buffer);
+					const { frames, detected } = cuebit.process(buffer);
 					drawer.draw(frames[debugViewRef.current]);
 
-					const { cue, obj1, obj2, angle } = testPropsRef.current;
-					const result = simulateTrajectory(cue, angle, [obj1, obj2]);
-					onFrameRef.current(result);
+					// 공 3개가 모두 감지되었을 때만 데이터 전달
+					if (detected.cue && detected.obj1 && detected.obj2) {
+						onFrameRef.current({
+							balls: {
+								cue: detected.cue,
+								red: detected.obj1,
+								yellow: detected.obj2,
+							},
+							angle: detected.angle,
+						});
+					} else {
+						onFrameRef.current(null);
+					}
 				});
 
 				cuebit.destroy();
@@ -133,12 +174,11 @@ function useCamera({
 
 		startCamera();
 
-		// 클린업 함수 (메모리 및 하드웨어 점유 해제)
 		return () => {
 			ac.abort();
 			if (rAFId) cancelAnimationFrame(rAFId);
 			if (activeStream) {
-				activeStream.getTracks().forEach(track => track.stop()); // 카메라 불빛 꺼짐 보장
+				activeStream.getTracks().forEach((track) => track.stop());
 			}
 		};
 	}, [createFrameDrawer, videoCanvasRef]);

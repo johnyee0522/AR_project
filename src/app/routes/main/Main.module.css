@@ -145,6 +145,75 @@
 	font-weight: bold;
 }
 
+/* 테스트 패널 관련 스타일 */
+.openTestBtn {
+	background-color: rgba(255, 255, 255, 0.15);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	color: white;
+	padding: 6px 10px;
+	border-radius: 6px;
+	font-size: 11px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+
+.openTestBtn:hover {
+	background-color: rgba(255, 255, 255, 0.25);
+}
+
+.testPanel {
+	position: absolute;
+	top: 200px;
+	right: 15px;
+	width: 200px;
+	background-color: rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(12px);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	padding: 15px;
+	z-index: 100;
+	color: white;
+}
+
+.testPanelHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 15px;
+}
+
+.testPanelHeader h3 {
+	margin: 0;
+	font-size: 14px;
+	color: #00e5ff;
+}
+
+.testPanelHeader button {
+	background: none;
+	border: none;
+	color: white;
+	font-size: 20px;
+	cursor: pointer;
+	padding: 0;
+	line-height: 1;
+}
+
+.testGroup {
+	margin-bottom: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.testGroup label {
+	font-size: 10px;
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.testGroup input[type="range"] {
+	width: 100%;
+}
+
 /* 에러 메시지 */
 .error {
 	position: absolute;
