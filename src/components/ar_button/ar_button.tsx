@@ -16,7 +16,7 @@ function ARButton({ isARMode, onClick }: ARButtonProps) {
 			className={`${styles.button} ${isARMode ? styles.active : styles.inactive}`}
 			onClick={onClick}
 		>
-			{isARMode ? "⏹ AR 종료" : "▶️ AR 시작"}
+			{isARMode ? "AR 종료" : "AR 시작"}
 		</button>
 	);
 }

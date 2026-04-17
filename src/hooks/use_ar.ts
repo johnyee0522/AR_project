@@ -83,7 +83,7 @@ function useAR({
 
 			// 물리적 충돌 지점과 일치시키기 위한 시각적 공 반지름 보정
 			const ballRadiusPx = (0.03075 / 2.84) * canvas.width * 2.0;
-			const minimapBallRadiusPx = 3;
+			const minimapBallRadiusPx = (minimapCanvas.width / 70) * 3;
 
 			for (const trajectory of result.trajectories) {
 				const color = getBallColor(trajectory.ballId);
@@ -94,15 +94,7 @@ function useAR({
 
 				if (scaledWaypoints.length === 0) continue;
 
-				// 1. 메인 AR 캔버스 그리기
-				if (scaledWaypoints.length >= 2) {
-					drawTrajectoryLine(ctx, scaledWaypoints, color, {
-						dashed: true,
-						lineWidth: 2,
-						glow: true,
-					});
-				}
-				drawBallPoint(ctx, scaledWaypoints[0], color, ballRadiusPx, true);
+				// 1. 메인 AR 캔버스 그리기 (생략 - 향후 탑뷰 변환 오버레이로 대체 예정)
 
 				// 2. 미니맵 그리기
 				const minimapWaypoints = scaledWaypoints.map((p) => ({
@@ -110,8 +102,11 @@ function useAR({
 					y: p.y * scaleY,
 				}));
 				if (minimapWaypoints.length >= 2) {
+					// 미니맵 크기에 비례하여 점선 간격 조절 (기본 4, 확대 시 약 6으로 더 촘촘하게)
+					const dashSize = (minimapCanvas.width / 70) * 1.33 + 2.67;
 					drawTrajectoryLine(mCtx, minimapWaypoints, color, {
-						dashed: false,
+						dashed: true,
+						dashPattern: [dashSize, dashSize],
 						lineWidth: 1,
 					});
 				}
@@ -136,12 +131,14 @@ function drawTrajectoryLine(
 	ctx: CanvasRenderingContext2D,
 	points: { x: number; y: number }[],
 	color: string,
-	options: { dashed?: boolean; lineWidth: number; glow?: boolean },
+	options: { dashed?: boolean; dashPattern?: number[]; lineWidth: number; glow?: boolean },
 ) {
 	ctx.save();
 	ctx.strokeStyle = color;
 	ctx.lineWidth = options.lineWidth;
-	if (options.dashed) ctx.setLineDash([6, 6]);
+	if (options.dashed) {
+		ctx.setLineDash(options.dashPattern || [6, 6]);
+	}
 	if (options.glow) {
 		ctx.shadowBlur = 10;
 		ctx.shadowColor = color;

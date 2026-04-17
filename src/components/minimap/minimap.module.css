@@ -11,7 +11,17 @@
 	box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
 	backdrop-filter: blur(5px);
 	overflow: hidden;
-	transition: opacity 0.3s;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	cursor: pointer;
+}
+
+.enlarged {
+	width: 175px;
+	height: 300px;
+	top: 80px;
+	right: 20px;
+	box-shadow: 0 0 25px rgba(0, 229, 255, 0.6);
+	background-color: rgba(10, 30, 20, 0.95);
 }
 
 .visible {
@@ -34,6 +44,7 @@
 	top: 0;
 	z-index: 21;
 	pointer-events: none;
+	text-shadow: 0 0 4px rgba(0, 229, 255, 0.8);
 }
 
 .canvas {

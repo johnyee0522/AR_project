@@ -12,6 +12,7 @@ export class Simulation {
 	private readonly TABLE_WIDTH_M = 2.84;
 	private readonly TABLE_HEIGHT_M = 1.42;
 	private readonly BALL_RADIUS_M = 0.03075;
+	private readonly BALL_MASS_KG = 0.21;
 
 	constructor(rapier: typeof RAPIER) {
 		this.rapier = rapier;
@@ -19,16 +20,10 @@ export class Simulation {
 		this.setupTable();
 	}
 
-	/**
-	 * 물리 월드 리소스 해제
-	 */
 	public destroy() {
 		this.world.free();
 	}
 
-	/**
-	 * 당구대 벽면(충돌체) 설정
-	 */
 	private setupTable() {
 		const W = this.TABLE_WIDTH_M;
 		const H = this.TABLE_HEIGHT_M;
@@ -45,33 +40,31 @@ export class Simulation {
 		const body = this.world.createRigidBody(bodyDesc);
 		const colliderDesc = this.rapier.ColliderDesc.cuboid(hx, hy)
 			.setRestitution(0.85)
-			.setFriction(0.2);
+			.setFriction(0.6);
 		this.world.createCollider(colliderDesc, body);
 	}
 
-	/**
-	 * 공의 위치를 감지된 데이터나 테스트 데이터로 동기화
-	 * @param ballPositions 공 ID별 정규화된 좌표 (0-1000)
-	 */
 	public updateBallPositions(ballPositions: Record<string, Point>) {
 		for (const [id, pos] of Object.entries(ballPositions)) {
+			if (isNaN(pos.x) || isNaN(pos.y)) continue;
+
 			const mX = (pos.x / 1000) * this.TABLE_WIDTH_M;
 			const mY = (pos.y / 1000) * this.TABLE_HEIGHT_M;
 
 			let body = this.balls.get(id);
 			if (!body) {
-				const bodyDesc = this.rapier.RigidBodyDesc.dynamic().setTranslation(
-					mX,
-					mY,
-				);
+				const bodyDesc = this.rapier.RigidBodyDesc.dynamic()
+					.setTranslation(mX, mY)
+					.setLinearDamping(0.8)
+					.setAngularDamping(0.8);
+				
 				body = this.world.createRigidBody(bodyDesc);
 				const colliderDesc = this.rapier.ColliderDesc.ball(this.BALL_RADIUS_M)
 					.setRestitution(0.92)
-					.setFriction(0.1)
-					.setDensity(1.0);
+					.setFriction(0.3)
+					.setDensity(70.7);
+				
 				this.world.createCollider(colliderDesc, body);
-				body.setLinearDamping(0.15);
-				body.setAngularDamping(0.15);
 				this.balls.set(id, body);
 			} else {
 				body.setTranslation({ x: mX, y: mY }, true);
@@ -81,16 +74,12 @@ export class Simulation {
 		}
 	}
 
-	/**
-	 * 현재 위치와 타격 파라미터를 기반으로 궤적 예측
-	 * @param angleDeg 타격 각도 (도)
-	 * @param power 타격 세기
-	 * @param maxSteps 최대 시뮬레이션 스텝
-	 */
 	public predict(
 		angleDeg: number,
 		power: number,
 		maxSteps: number = 300,
+		offsetSide: number = 0,
+		offsetTop: number = 0,
 	): PhysicsResult {
 		const cueBall = this.balls.get("cue");
 		if (!cueBall) return { trajectories: [] };
@@ -106,18 +95,38 @@ export class Simulation {
 		}));
 
 		const angleRad = (angleDeg * Math.PI) / 180;
-		cueBall.setLinvel(
-			{ x: Math.cos(angleRad) * power, y: Math.sin(angleRad) * power },
-			true,
-		);
+		const initialDir = { x: Math.cos(angleRad), y: Math.sin(angleRad) };
+		const v0 = power * 2.0;
+		
+		cueBall.setLinvel({ x: initialDir.x * v0, y: initialDir.y * v0 }, true);
+		cueBall.setAngvel(offsetSide * 2.0, true);
 
-		const ballTracks = ballIds.map((id) => ({
-			ballId: id,
-			waypoints: [] as Point[],
-			isStopped: false,
-		}));
+		const ballTracks = ballIds.map((id, index) => {
+			const ball = allBalls[index];
+			const pos = ball.translation();
+			return {
+				ballId: id,
+				waypoints: [this.toNormalized(pos.x, pos.y)], 
+				isStopped: false,
+			};
+		});
+
+		let spinEnergy = (offsetTop / 30) * v0;
 
 		for (let i = 0; i < maxSteps; i++) {
+			if (Math.abs(spinEnergy) > 0.01) {
+				const vel = cueBall.linvel();
+				const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+				if (speed > 0.1) {
+					const spinForce = spinEnergy * 0.002 * this.BALL_MASS_KG;
+					cueBall.applyImpulse({
+						x: initialDir.x * spinForce,
+						y: initialDir.y * spinForce
+					}, true);
+				}
+				spinEnergy *= 0.97;
+			}
+
 			this.world.step();
 			let anyMoving = false;
 
@@ -129,6 +138,11 @@ export class Simulation {
 				const vel = ball.linvel();
 				const speedSq = vel.x * vel.x + vel.y * vel.y;
 
+				if (isNaN(pos.x) || isNaN(pos.y)) {
+					track.isStopped = true;
+					return;
+				}
+
 				track.waypoints.push(this.toNormalized(pos.x, pos.y));
 				if (speedSq < 0.001) track.isStopped = true;
 				else anyMoving = true;
@@ -137,7 +151,6 @@ export class Simulation {
 			if (!anyMoving) break;
 		}
 
-		// 예측 후 원래 상태로 복구
 		allBalls.forEach((ball, index) => {
 			const state = backupStates[index];
 			ball.setTranslation(state.translation, true);
@@ -154,9 +167,6 @@ export class Simulation {
 		};
 	}
 
-	/**
-	 * 미터 단위를 정규화 좌표계(0-1000)로 변환
-	 */
 	private toNormalized(metersX: number, metersY: number): Point {
 		return {
 			x: (metersX / this.TABLE_WIDTH_M) * 1000,

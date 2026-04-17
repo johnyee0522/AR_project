@@ -29,9 +29,11 @@ function Main() {
 			yellow: { x: 700, y: 300 },
 		},
 		angle: 45,
-		power: 1.5,
+		power: 0.5,
+		sideSpin: 0,
+		topBottomSpin: 0,
 	});
-	const [isTestPanelOpen, setIsTestPanelOpen] = useState(true);
+	const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
 
 	const { isARMode, toggleARMode, drawAR } = useAR({
 		arCanvasRef,
@@ -54,10 +56,10 @@ function Main() {
 			// 비전 엔진에서 감지된 공 위치를 수동 설정값보다 우선시함
 			const balls = detected?.balls || gameState.balls;
 			const angle = detected?.angle ?? gameState.angle;
-			const power = gameState.power;
+			const { power, sideSpin, topBottomSpin } = gameState;
 
 			sim.updateBallPositions(balls);
-			const physicsResult = sim.predict(angle, power);
+			const physicsResult = sim.predict(angle, power, 300, sideSpin, topBottomSpin);
 
 			drawAR(physicsResult);
 		},
@@ -116,6 +118,8 @@ function Main() {
 					obj2={gameState.balls.yellow}
 					angle={gameState.angle}
 					power={gameState.power}
+					sideSpin={gameState.sideSpin}
+					topBottomSpin={gameState.topBottomSpin}
 					onCueChange={(pos) =>
 						setGameState((prev) => ({
 							...prev,
@@ -140,26 +144,29 @@ function Main() {
 					onPowerChange={(power) =>
 						setGameState((prev) => ({ ...prev, power }))
 					}
+					onSideSpinChange={(sideSpin) =>
+						setGameState((prev) => ({ ...prev, sideSpin }))
+					}
+					onTopBottomSpinChange={(topBottomSpin) =>
+						setGameState((prev) => ({ ...prev, topBottomSpin }))
+					}
 					onClose={() => setIsTestPanelOpen(false)}
 				/>
 			)}
 
 			<div className={styles.controls}>
-				<div
-					style={{
-						display: "flex",
-						alignItems: "center",
-						gap: "10px",
-						marginBottom: "10px",
-						justifyContent: "center",
-					}}
-				>
-					<button
-						className={styles.openTestBtn}
-						onClick={() => setIsTestPanelOpen((prev) => !prev)}
-					>
-						{isTestPanelOpen ? "닫기" : "테스트 패널"}
-					</button>
+				<div className={styles.debugRow}>
+					<div className={styles.debugGroup}>
+						<span className={styles.debugLabel}>TEST</span>
+						<div className={styles.debugTrack}>
+							<button
+								className={`${styles.openTestBtn} ${isTestPanelOpen ? styles.active : ""}`}
+								onClick={() => setIsTestPanelOpen((prev) => !prev)}
+							>
+								패널
+							</button>
+						</div>
+					</div>
 					<DebugViewToggle current={debugView} onChange={setDebugView} />
 				</div>
 				<ARButton isARMode={isARMode} onClick={toggleARMode} />
