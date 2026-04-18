@@ -59,7 +59,7 @@ function Main() {
 			const { power, sideSpin, topBottomSpin } = gameState;
 
 			sim.updateBallPositions(balls);
-			const physicsResult = sim.predict(angle, power, 300, sideSpin, topBottomSpin);
+			const physicsResult = sim.predict(angle, power, 4000, sideSpin, topBottomSpin);
 
 			drawAR(physicsResult);
 		},

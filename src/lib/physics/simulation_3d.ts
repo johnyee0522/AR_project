@@ -1,6 +1,13 @@
 import type RAPIER from "@dimforge/rapier3d";
 import type { PhysicsResult, Point } from "@/types/physics";
 
+interface SavedState {
+	p: RAPIER.Vector;
+	r: RAPIER.Rotation;
+	lv: RAPIER.Vector;
+	av: RAPIER.Vector;
+}
+
 /**
  * Rapier3D를 이용한 고도화된 당구 물리 시뮬레이션 클래스
  */
@@ -21,9 +28,7 @@ export class Simulation3D {
 
 	constructor(rapier: typeof RAPIER) {
 		this.rapier = rapier;
-		// 중력을 아래로 설정
 		this.world = new this.rapier.World({ x: 0.0, y: 0.0, z: -this.G });
-		// 물리 엔진 연산 주기를 240fps로 설정 (정밀도 향상)
 		this.world.timestep = 1 / 240;
 		this.setupTable();
 	}
@@ -36,9 +41,8 @@ export class Simulation3D {
 		const W = this.TABLE_WIDTH_M;
 		const H = this.TABLE_HEIGHT_M;
 		const R = this.BALL_RADIUS_M;
-		const thickness = 0.05; // 5cm (반-두께)
+		const thickness = 0.05; 
 
-		// 바닥 표면이 z=0이 되도록 설정
 		const groundDesc = this.rapier.RigidBodyDesc.fixed().setTranslation(W / 2, H / 2, -thickness);
 		const groundBody = this.world.createRigidBody(groundDesc);
 		const groundCollider = this.rapier.ColliderDesc.cuboid(W / 2, H / 2, thickness)
@@ -46,12 +50,11 @@ export class Simulation3D {
 			.setRestitution(0);
 		this.world.createCollider(groundCollider, groundBody);
 
-		// 쿠션 (벽) - 정확한 위치와 방향으로 수정
 		const wallThick = 0.05;
-		this.createWall(W / 2, -wallThick, R, W / 2, wallThick, R); // 아래쪽 벽
-		this.createWall(W / 2, H + wallThick, R, W / 2, wallThick, R); // 위쪽 벽
-		this.createWall(-wallThick, H / 2, R, wallThick, H / 2, R); // 왼쪽 벽
-		this.createWall(W + wallThick, H / 2, R, wallThick, H / 2, R); // 오른쪽 벽
+		this.createWall(W / 2, -wallThick, R, W / 2, wallThick, R); 
+		this.createWall(W / 2, H + wallThick, R, W / 2, wallThick, R); 
+		this.createWall(-wallThick, H / 2, R, wallThick, H / 2, R); 
+		this.createWall(W + wallThick, H / 2, R, wallThick, H / 2, R); 
 	}
 
 	private createWall(x: number, y: number, z: number, hx: number, hy: number, hz: number) {
@@ -77,7 +80,7 @@ export class Simulation3D {
 					.setTranslation(mX, mY, mZ)
 					.setLinearDamping(0)
 					.setAngularDamping(0)
-					.setCcdEnabled(id === "cue"); // 큐볼에 CCD 활성화 (고속 충돌 방지)
+					.setCcdEnabled(id === "cue"); 
 				
 				body = this.world.createRigidBody(bodyDesc);
 				const colliderDesc = this.rapier.ColliderDesc.ball(this.BALL_RADIUS_M)
@@ -98,28 +101,26 @@ export class Simulation3D {
 	public predict(
 		angleDeg: number,
 		power: number,
-		maxSteps: number = 4000, // 240fps 기준 약 16초
-		offsetSide: number = 0,
-		offsetTop: number = 0,
+		maxSteps = 4000, 
+		offsetSide = 0,
+		offsetTop = 0,
 	): PhysicsResult {
 		const cueBallBody = this.balls.get("cue");
 		if (!cueBallBody) return { trajectories: [] };
 
-		// 상태 백업
-		const states = new Map<string, { p: any, r: any, lv: any, av: any }>();
+		// 수정 1: any 타입 제거 및 명확한 타입 캐스팅
+		const states = new Map<string, SavedState>();
 		for (const [id, body] of this.balls) {
 			states.set(id, {
-				p: body.translation(),
-				r: body.rotation(),
-				lv: body.linvel(),
-				av: body.angvel()
+				p: { ...body.translation() },
+				r: { ...body.rotation() },
+				lv: { ...body.linvel() },
+				av: { ...body.angvel() }
 			});
 		}
 
-		// 타격 적용
 		const angleRad = (angleDeg * Math.PI) / 180;
 		const dir = { x: Math.cos(angleRad), y: Math.sin(angleRad) };
-		// 계수를 2.5에서 1.2로 낮춰 0~1 사이의 power 값이 현실적인 속도를 내도록 조정
 		const impulseMag = power * 1.2; 
 		const impulse = { x: dir.x * impulseMag, y: dir.y * impulseMag, z: 0 };
 		
@@ -137,7 +138,6 @@ export class Simulation3D {
 		};
 		cueBallBody.applyTorqueImpulse(tImp, true);
 
-		// 예측 루프 준비
 		const trajectories: Record<string, Point[]> = {};
 		const lastVel: Record<string, { x: number, y: number }> = {};
 
@@ -149,7 +149,7 @@ export class Simulation3D {
 			lastVel[id] = { x: v.x, y: v.y };
 		}
 
-		const dt = 1 / 240; // 240fps 연산
+		const dt = 1 / 240; 
 		const R = this.BALL_RADIUS_M;
 
 		for (let i = 0; i < maxSteps; i++) {
@@ -161,7 +161,6 @@ export class Simulation3D {
 				const v = body.linvel();
 				const w = body.angvel();
 
-				// 바닥 접점에서의 슬립 속도
 				const vsx = v.x - w.y * R;
 				const vsy = v.y + w.x * R;
 				const vs_mag = Math.sqrt(vsx * vsx + vsy * vsy);
@@ -169,11 +168,7 @@ export class Simulation3D {
 				let isThisBallMoving = false;
 
 				if (vs_mag > 0.005) {
-					// 1. 슬라이딩 마찰 (Sliding Friction)
 					let f_mag = this.MU_K * this.G * dt;
-					
-					// [핵심 수정] Slip을 멈추기 위한 dv는 vs_mag / 3.5 입니다.
-					// 이 값을 넘어서면 공이 반대 방향으로 튀게 되어 궤적이 요동칩니다.
 					if (f_mag > vs_mag / 3.5) f_mag = vs_mag / 3.5;
 
 					const f_dir = { x: vsx / vs_mag, y: vsy / vs_mag };
@@ -182,20 +177,20 @@ export class Simulation3D {
 					
 					body.setLinvel({ x: v.x + dvx, y: v.y + dvy, z: v.z }, true);
 					
-					// Delta W = 2.5/R * Delta V
 					const dwx = (2.5 / R) * dvy;
 					const dwy = -(2.5 / R) * dvx;
 					body.setAngvel({ x: w.x + dwx, y: w.y + dwy, z: w.z }, true);
 					isThisBallMoving = true;
 				} else {
-					// 2. 구름 마찰 (Rolling Friction)
 					const speed = Math.sqrt(v.x * v.x + v.y * v.y);
 					if (speed > 0.005) {
 						let f_mag = this.MU_R * this.G * dt;
-						if (f_mag > speed) f_mag = speed; // Clamping
+						if (f_mag > speed) f_mag = speed; 
 
 						const ratio = (speed - f_mag) / speed;
 						body.setLinvel({ x: v.x * ratio, y: v.y * ratio, z: v.z }, true);
+						
+						// 수정 2: 클래스 인스턴스 전개(Spread) 오류 방지
 						body.setAngvel({ x: -v.y / R, y: v.x / R, z: w.z }, true);
 						isThisBallMoving = true;
 					} else {
@@ -204,18 +199,17 @@ export class Simulation3D {
 					}
 				}
 
-				// 3. 사이드 스핀 감쇄
 				const wz_abs = Math.abs(w.z);
 				if (wz_abs > 0.005) {
 					let alpha_z = (5 / 2) * (this.MU_S * this.G / R) * dt;
-					if (alpha_z > wz_abs) alpha_z = wz_abs; // Clamping
+					if (alpha_z > wz_abs) alpha_z = wz_abs; 
 					const next_wz = w.z > 0 ? w.z - alpha_z : w.z + alpha_z;
-					body.setAngvel({ ...body.angvel(), z: next_wz }, true);
+					// 수정 2: 구조분해할당 제거하고 명확히 매핑
+					body.setAngvel({ x: w.x, y: w.y, z: next_wz }, true);
 				}
 
 				if (isThisBallMoving) worldMoving = true;
 
-				// 궤적 기록 (240fps이므로 기록 주기를 16으로 늘려 waypoint 개수 유지)
 				const v_new = body.linvel();
 				const dvx = v_new.x - lastVel[id].x;
 				const dvy = v_new.y - lastVel[id].y;
@@ -230,7 +224,6 @@ export class Simulation3D {
 			if (!worldMoving) break;
 		}
 
-		// 상태 복구
 		for (const [id, body] of this.balls) {
 			const s = states.get(id)!;
 			body.setTranslation(s.p, true);
