@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
 	calibratePowerTravel,
-	estimatePowerTravel,
-	POWER_LEVELS,
+	estimatePowerValueTravel,
 } from "@/lib/physics";
+import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "@/lib/physics/physics_constants";
 import styles from "./main.module.css";
 
 interface BallPos {
@@ -30,27 +30,18 @@ interface TestPanelProps {
 	onClose: () => void;
 }
 
-const SPIN_OFFSET_MM = 60;
-const SPIN_OPTIONS = [
-	{ label: "\uc0c1", sideSpin: 0, topBottomSpin: SPIN_OFFSET_MM },
-	{ label: "\ud558", sideSpin: 0, topBottomSpin: -SPIN_OFFSET_MM },
-	{ label: "\uc88c", sideSpin: -SPIN_OFFSET_MM, topBottomSpin: 0 },
-	{ label: "\uc6b0", sideSpin: SPIN_OFFSET_MM, topBottomSpin: 0 },
-] as const;
+const MAX_SPIN_OFFSET_MM = 100;
+const POWER_MIN = 0;
+const POWER_MAX = 3;
+const POWER_STEP = 0.1;
+const POSITION_MIN_M = 0;
+const POSITION_STEP_M = 0.01;
+const ANGLE_MIN = 0;
+const ANGLE_MAX = 360;
 
-function getPowerLevel(power: number) {
-	return POWER_LEVELS.reduce((closest, level) =>
-		Math.abs(level.value - power) < Math.abs(closest.value - power)
-			? level
-			: closest,
-	);
-}
-
-function getSpinOption(sideSpin: number, topBottomSpin: number) {
-	return SPIN_OPTIONS.find(
-		(option) =>
-			option.sideSpin === sideSpin && option.topBottomSpin === topBottomSpin,
-	);
+function clampValue(value: number, min: number, max: number) {
+	if (!Number.isFinite(value)) return min;
+	return Math.max(min, Math.min(max, value));
 }
 
 const TestPanel: React.FC<TestPanelProps> = ({
@@ -75,21 +66,26 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	const isDragging = useRef(false);
 	const offset = useRef({ x: 0, y: 0 });
 	const panelRef = useRef<HTMLDivElement>(null);
-	const currentPowerLevel = getPowerLevel(power);
-	const currentSpinOption = getSpinOption(sideSpin, topBottomSpin);
-	const baselineTravel = estimatePowerTravel(currentPowerLevel);
+	const baselineTravel = estimatePowerValueTravel(power);
 	const [targetTravelMeters, setTargetTravelMeters] = useState(
 		() => Number(baselineTravel.travelMeters.toFixed(2)),
 	);
 	const targetTravelForCalibration = Math.max(0.01, targetTravelMeters);
 	const calibration = calibratePowerTravel({
-		power: currentPowerLevel.value,
+		power,
 		targetTravelMeters: targetTravelForCalibration,
 	});
 
 	const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
-		const targetTag = (e.target as HTMLElement).tagName;
-		if (targetTag === "INPUT" || targetTag === "BUTTON") return;
+		const target = e.target as HTMLElement;
+		const targetTag = target.tagName;
+		if (
+			targetTag === "INPUT" ||
+			targetTag === "BUTTON" ||
+			target.closest("[data-no-panel-drag]")
+		) {
+			return;
+		}
 
 		isDragging.current = true;
 		const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
@@ -130,21 +126,69 @@ const TestPanel: React.FC<TestPanelProps> = ({
 		};
 	}, []);
 
-	const selectSpin = (option: (typeof SPIN_OPTIONS)[number]) => {
-		if (currentSpinOption?.label === option.label) {
-			onSideSpinChange(0);
-			onTopBottomSpinChange(0);
-			return;
-		}
+	const selectSpinPoint = (event: React.PointerEvent<HTMLButtonElement>) => {
+		const rect = event.currentTarget.getBoundingClientRect();
+		const centerX = rect.left + rect.width / 2;
+		const centerY = rect.top + rect.height / 2;
+		const radius = rect.width / 2;
+		const rawX = (event.clientX - centerX) / radius;
+		const rawY = (event.clientY - centerY) / radius;
+		const distance = Math.hypot(rawX, rawY);
+		const clampedX = distance > 1 ? rawX / distance : rawX;
+		const clampedY = distance > 1 ? rawY / distance : rawY;
 
-		onSideSpinChange(option.sideSpin);
-		onTopBottomSpinChange(option.topBottomSpin);
+		onSideSpinChange(Math.round(clampedX * MAX_SPIN_OFFSET_MM));
+		onTopBottomSpinChange(Math.round(-clampedY * MAX_SPIN_OFFSET_MM));
 	};
 
-	const selectPower = (level: (typeof POWER_LEVELS)[number]) => {
-		onPowerChange(level.value);
-		setTargetTravelMeters(Number(estimatePowerTravel(level).travelMeters.toFixed(2)));
+	const updateSideSpin = (value: number) => {
+		onSideSpinChange(
+			Math.round(clampValue(value, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM)),
+		);
 	};
+
+	const updateTopBottomSpin = (value: number) => {
+		onTopBottomSpinChange(
+			Math.round(clampValue(value, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM)),
+		);
+	};
+
+	const updatePower = (value: number) => {
+		onPowerChange(Number(clampValue(value, POWER_MIN, POWER_MAX).toFixed(1)));
+	};
+
+	const updateAngle = (value: number) => {
+		onAngleChange(Math.round(clampValue(value, ANGLE_MIN, ANGLE_MAX)));
+	};
+
+	const updateBallCoordinate = (
+		ball: BallPos,
+		axis: keyof BallPos,
+		value: number,
+		onChange: (pos: BallPos) => void,
+	) => {
+		const max = axis === "x" ? TABLE_WIDTH_M : TABLE_HEIGHT_M;
+		onChange({
+			...ball,
+			[axis]: Number(clampValue(value, POSITION_MIN_M, max).toFixed(2)),
+		});
+	};
+
+	const resetSpin = () => {
+		onSideSpinChange(0);
+		onTopBottomSpinChange(0);
+	};
+
+	const spinMarkerX =
+		50 +
+		(clampValue(sideSpin, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM) /
+			MAX_SPIN_OFFSET_MM) *
+			50;
+	const spinMarkerY =
+		50 -
+		(clampValue(topBottomSpin, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM) /
+			MAX_SPIN_OFFSET_MM) *
+			50;
 
 	return (
 		<div
@@ -168,43 +212,71 @@ const TestPanel: React.FC<TestPanelProps> = ({
 			</div>
 
 			<div className={styles.testGroup}>
-				<label>{`\uc218\uad6c X: ${cue.x} / Y: ${cue.y}`}</label>
-				<input type="range" min="0" max="1000" value={cue.x} onChange={(e) => onCueChange({ ...cue, x: Number(e.target.value) })} />
-				<input type="range" min="0" max="1000" value={cue.y} onChange={(e) => onCueChange({ ...cue, y: Number(e.target.value) })} />
+				<label>{`\uc218\uad6c X: ${cue.x.toFixed(2)}m / Y: ${cue.y.toFixed(2)}m`}</label>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={cue.x} onChange={(e) => updateBallCoordinate(cue, "x", Number(e.target.value), onCueChange)} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={cue.x.toFixed(2)} onChange={(e) => updateBallCoordinate(cue, "x", Number(e.target.value), onCueChange)} />
+				</div>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={cue.y} onChange={(e) => updateBallCoordinate(cue, "y", Number(e.target.value), onCueChange)} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={cue.y.toFixed(2)} onChange={(e) => updateBallCoordinate(cue, "y", Number(e.target.value), onCueChange)} />
+				</div>
 			</div>
 
 			<div className={styles.testGroup}>
-				<label>{`\ubaa9\uc801\uad6c 1 X: ${obj1.x} / Y: ${obj1.y}`}</label>
-				<input type="range" min="0" max="1000" value={obj1.x} onChange={(e) => onObj1Change({ ...obj1, x: Number(e.target.value) })} />
-				<input type="range" min="0" max="1000" value={obj1.y} onChange={(e) => onObj1Change({ ...obj1, y: Number(e.target.value) })} />
+				<label>{`\ubaa9\uc801\uad6c 1 X: ${obj1.x.toFixed(2)}m / Y: ${obj1.y.toFixed(2)}m`}</label>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj1.x} onChange={(e) => updateBallCoordinate(obj1, "x", Number(e.target.value), onObj1Change)} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj1.x.toFixed(2)} onChange={(e) => updateBallCoordinate(obj1, "x", Number(e.target.value), onObj1Change)} />
+				</div>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj1.y} onChange={(e) => updateBallCoordinate(obj1, "y", Number(e.target.value), onObj1Change)} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj1.y.toFixed(2)} onChange={(e) => updateBallCoordinate(obj1, "y", Number(e.target.value), onObj1Change)} />
+				</div>
 			</div>
 
 			<div className={styles.testGroup}>
-				<label>{`\ubaa9\uc801\uad6c 2 X: ${obj2.x} / Y: ${obj2.y}`}</label>
-				<input type="range" min="0" max="1000" value={obj2.x} onChange={(e) => onObj2Change({ ...obj2, x: Number(e.target.value) })} />
-				<input type="range" min="0" max="1000" value={obj2.y} onChange={(e) => onObj2Change({ ...obj2, y: Number(e.target.value) })} />
+				<label>{`\ubaa9\uc801\uad6c 2 X: ${obj2.x.toFixed(2)}m / Y: ${obj2.y.toFixed(2)}m`}</label>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj2.x} onChange={(e) => updateBallCoordinate(obj2, "x", Number(e.target.value), onObj2Change)} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj2.x.toFixed(2)} onChange={(e) => updateBallCoordinate(obj2, "x", Number(e.target.value), onObj2Change)} />
+				</div>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj2.y} onChange={(e) => updateBallCoordinate(obj2, "y", Number(e.target.value), onObj2Change)} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj2.y.toFixed(2)} onChange={(e) => updateBallCoordinate(obj2, "y", Number(e.target.value), onObj2Change)} />
+				</div>
 			</div>
 
 			<div className={styles.testGroup}>
 				<label>{`\ud0c0\uaca9 \uac01\ub3c4: ${angle}\u00b0`}</label>
-				<input type="range" min="0" max="360" value={angle} onChange={(e) => onAngleChange(Number(e.target.value))} />
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={ANGLE_MIN} max={ANGLE_MAX} value={angle} onChange={(e) => updateAngle(Number(e.target.value))} />
+					<input className={styles.compactNumberInput} type="number" min={ANGLE_MIN} max={ANGLE_MAX} step="1" value={angle} onChange={(e) => updateAngle(Number(e.target.value))} />
+				</div>
 			</div>
 
 			<div className={styles.testGroup}>
-				<label>{`\ud0c0\uaca9 \uac15\ub3c4: ${currentPowerLevel.label}`}</label>
-				<div className={styles.powerLevelGroup}>
-					{POWER_LEVELS.map((level) => (
-						<button
-							key={level.label}
-							type="button"
-							className={`${styles.powerLevelButton} ${
-								currentPowerLevel.label === level.label ? styles.active : ""
-							}`}
-							onClick={() => selectPower(level)}
-						>
-							{level.label}
-						</button>
-					))}
+				<label>{`\ud0c0\uaca9 \uac15\ub3c4: ${power.toFixed(1)}`}</label>
+				<input
+					type="range"
+					min={POWER_MIN}
+					max={POWER_MAX}
+					step={POWER_STEP}
+					value={power}
+					onChange={(e) => updatePower(Number(e.target.value))}
+				/>
+				<input
+					className={styles.numberInput}
+					type="number"
+					min={POWER_MIN}
+					max={POWER_MAX}
+					step={POWER_STEP}
+					value={power.toFixed(1)}
+					onChange={(e) => updatePower(Number(e.target.value))}
+				/>
+				<div className={styles.powerSliderMeta}>
+					<span>{POWER_MIN}</span>
+					<span>{POWER_MAX}</span>
 				</div>
 			</div>
 
@@ -237,21 +309,58 @@ const TestPanel: React.FC<TestPanelProps> = ({
 
 			<div className={styles.testGroup}>
 				<label>
-					{`\uc2a4\ud540: ${currentSpinOption?.label ?? "\uc120\ud0dd \uc548 \ub428"}`}
+					{`\uc2a4\ud540: \uc88c/\uc6b0 ${sideSpin}mm, \uc0c1/\ud558 ${topBottomSpin}mm`}
 				</label>
-				<div className={styles.spinDirectionGroup}>
-					{SPIN_OPTIONS.map((option) => (
-						<button
-							key={option.label}
-							type="button"
-							className={`${styles.spinDirectionButton} ${
-								currentSpinOption?.label === option.label ? styles.active : ""
-							}`}
-							onClick={() => selectSpin(option)}
-						>
-							{option.label}
-						</button>
-					))}
+				<div className={styles.spinPadRow} data-no-panel-drag>
+					<button
+						type="button"
+						className={styles.spinPad}
+						onPointerDown={selectSpinPoint}
+						aria-label="스핀 타격 지점 선택"
+					>
+						<span className={styles.spinGuideHorizontal} />
+						<span className={styles.spinGuideVertical} />
+						<span
+							className={styles.spinMarker}
+							style={{
+								left: `${spinMarkerX}%`,
+								top: `${spinMarkerY}%`,
+							}}
+						/>
+					</button>
+					<button
+						type="button"
+						className={styles.spinResetButton}
+						onClick={resetSpin}
+					>
+						{"\uc911\uc559"}
+					</button>
+				</div>
+				<div className={styles.spinInputGrid} data-no-panel-drag>
+					<label>
+						<span>{"\uc88c/\uc6b0 mm"}</span>
+						<input
+							className={styles.numberInput}
+							type="number"
+							min={-MAX_SPIN_OFFSET_MM}
+							max={MAX_SPIN_OFFSET_MM}
+							step="1"
+							value={sideSpin}
+							onChange={(e) => updateSideSpin(Number(e.target.value))}
+						/>
+					</label>
+					<label>
+						<span>{"\uc0c1/\ud558 mm"}</span>
+						<input
+							className={styles.numberInput}
+							type="number"
+							min={-MAX_SPIN_OFFSET_MM}
+							max={MAX_SPIN_OFFSET_MM}
+							step="1"
+							value={topBottomSpin}
+							onChange={(e) => updateTopBottomSpin(Number(e.target.value))}
+						/>
+					</label>
 				</div>
 			</div>
 		</div>

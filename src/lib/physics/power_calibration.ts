@@ -6,14 +6,21 @@ import {
 
 export const POWER_LEVELS = [
 	{ id: "low", label: "\ud558", value: 0.5 },
-	{ id: "medium", label: "\uc911", value: 1 },
-	{ id: "high", label: "\uc0c1", value: 2 },
+	{ id: "medium", label: "\uc911", value: 1.5 },
+	{ id: "high", label: "\uc0c1", value: 3 },
 ] as const;
 
 export type PowerLevel = (typeof POWER_LEVELS)[number];
 
 export interface PowerTravelEstimate {
 	level: PowerLevel;
+	initialSpeed: number;
+	travelMeters: number;
+	stopTimeSeconds: number;
+}
+
+export interface PowerValueTravelEstimate {
+	power: number;
 	initialSpeed: number;
 	travelMeters: number;
 	stopTimeSeconds: number;
@@ -37,15 +44,29 @@ export function estimatePowerTravel(
 	level: PowerLevel,
 	tuning: Partial<Simulation2DTuning> = {},
 ): PowerTravelEstimate {
+	const estimate = estimatePowerValueTravel(level.value, tuning);
+
+	return {
+		level,
+		initialSpeed: estimate.initialSpeed,
+		travelMeters: estimate.travelMeters,
+		stopTimeSeconds: estimate.stopTimeSeconds,
+	};
+}
+
+export function estimatePowerValueTravel(
+	power: number,
+	tuning: Partial<Simulation2DTuning> = {},
+): PowerValueTravelEstimate {
 	const resolvedTuning = { ...DEFAULT_SIMULATION_2D_TUNING, ...tuning };
-	const initialSpeed = level.value * resolvedTuning.impulseScale;
+	const initialSpeed = power * resolvedTuning.impulseScale;
 	const deceleration = resolvedTuning.rollingFriction * GRAVITY;
 	const travelMeters =
 		deceleration > 0 ? (initialSpeed * initialSpeed) / (2 * deceleration) : 0;
 	const stopTimeSeconds = deceleration > 0 ? initialSpeed / deceleration : 0;
 
 	return {
-		level,
+		power,
 		initialSpeed,
 		travelMeters,
 		stopTimeSeconds,

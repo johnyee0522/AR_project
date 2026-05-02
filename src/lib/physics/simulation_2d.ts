@@ -1,5 +1,6 @@
 import type {
 	CushionSide,
+	MeterPoint,
 	PhysicsEvent,
 	PhysicsResult,
 	Point,
@@ -7,7 +8,6 @@ import type {
 import {
 	BALL_RADIUS_M,
 	GRAVITY,
-	NORMALIZED_SIZE,
 	POSITION_MARGIN_M,
 	TABLE_HEIGHT_M,
 	TABLE_WIDTH_M,
@@ -74,8 +74,11 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	dt: 1 / 240,
 };
 
-// 내부 시뮬레이션 상태는 2.84m x 1.42m 당구대 위의 meter 단위로 저장
-// 외부 입출력은 UI/AR 코드가 단순하게 유지되도록 0~1000 정규화 좌표를 사용
+export const SIMULATION_2D_TUNING_VERSION = JSON.stringify(
+	DEFAULT_SIMULATION_2D_TUNING,
+);
+
+// 내부와 외부 물리 좌표는 모두 2.84m x 1.42m 당구대 위의 meter 단위로 사용
 interface BallState {
 	id: string;
 	position: Vec2;
@@ -101,12 +104,18 @@ export class Simulation2D {
 	}
 
 	public updateBallPositions(ballPositions: Record<string, Point>): void {
+		this.updateBallPositionsMeters(ballPositions);
+	}
+
+	public updateBallPositionsMeters(
+		ballPositions: Record<string, MeterPoint>,
+	): void {
 		const liveIds = new Set(Object.keys(ballPositions));
 
 		for (const [id, pos] of Object.entries(ballPositions)) {
 			if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
 
-			const position = this.clampToTable(this.toMeter(pos));
+			const position = this.clampToTable(pos);
 			const existing = this.balls.get(id);
 			if (existing) {
 				existing.position = position;
@@ -132,7 +141,7 @@ export class Simulation2D {
 	public predict(
 		angleDeg: number,
 		power: number,
-		maxSteps = 1200,
+		maxSteps = 2400,
 		offsetSide = 0,
 		offsetTop = 0,
 	): PhysicsResult {
@@ -158,7 +167,7 @@ export class Simulation2D {
 		const lastPositions: Record<string, Vec2> = {};
 
 		for (const [id, ball] of this.balls) {
-			trajectories[id] = [this.toNormalized(ball.position)];
+			trajectories[id] = [{ ...ball.position }];
 			travelDistanceByBall[id] = 0;
 			lastPositions[id] = { ...ball.position };
 		}
@@ -232,6 +241,7 @@ export class Simulation2D {
 		// 빠른 공이나 얇은 두께 충돌을 놓칠 가능성을 줄이기 위함
 		this.resolveBallCollisions(
 			step,
+			trajectories,
 			events,
 			seenContacts,
 			shotDir,
@@ -270,9 +280,9 @@ export class Simulation2D {
 		const lastWaypoint = waypoints.at(-1);
 		if (
 			!lastWaypoint ||
-			distance(this.toMeter(lastWaypoint), position) > minDistance
+			distance(lastWaypoint, position) > minDistance
 		) {
-			waypoints.push(this.toNormalized(position));
+			waypoints.push({ ...position });
 		}
 	}
 
@@ -284,10 +294,7 @@ export class Simulation2D {
 		for (const [id, waypoints] of Object.entries(trajectories)) {
 			let total = 0;
 			for (let i = 1; i < waypoints.length; i++) {
-				total += distance(
-					this.toMeter(waypoints[i - 1]),
-					this.toMeter(waypoints[i]),
-				);
+				total += distance(waypoints[i - 1], waypoints[i]);
 			}
 			distances[id] = total;
 		}
@@ -532,6 +539,7 @@ export class Simulation2D {
 
 	private resolveBallCollisions(
 		step: number,
+		trajectories: Record<string, Point[]>,
 		events: PhysicsEvent[],
 		seenContacts: Set<string>,
 		shotDir: Vec2,
@@ -576,10 +584,11 @@ export class Simulation2D {
 						y: b.position.y + normal.y * overlap * 0.5,
 					};
 				}
-
 				const relVel = sub(b.velocity, a.velocity);
 				const normalSpeed = dot(relVel, normal);
 				if (normalSpeed > 0) continue;
+				this.appendWaypointIfMoved(trajectories, a.id, a.position, 0);
+				this.appendWaypointIfMoved(trajectories, b.id, b.position, 0);
 
 				// 같은 질량의 공끼리 충돌한다고 보고 충돌선 방향으로 impulse를 적용
 				// 접선 방향 속도는 아래의 수구 스핀 보정이 있을 때만 변경
@@ -620,39 +629,49 @@ export class Simulation2D {
 	): { time: number; normal: Vec2 } | null {
 		// |(prevB-prevA) + t*((moveB-moveA))| = 2R 식을 t 범위 [0, 1]에서 품
 		// 한 프레임 사이에 빠른 수구가 목적구를 지나쳐버리는 상황을 잡기 위한 계산
-		const currentDelta = sub(b.position, a.position);
-		const currentDist = length(currentDelta);
-		if (currentDist > 1e-8 && currentDist <= minDist) {
-			return { time: 1, normal: scale(currentDelta, 1 / currentDist) };
-		}
-
 		const prevDelta = sub(prevB, prevA);
 		const moveA = sub(a.position, prevA);
 		const moveB = sub(b.position, prevB);
 		const relativeMove = sub(moveB, moveA);
-		const aCoeff = dot(relativeMove, relativeMove);
-		if (aCoeff < 1e-12) return null;
-
-		const bCoeff = 2 * dot(prevDelta, relativeMove);
-		if (bCoeff >= 0) return null;
-
-		const cCoeff = dot(prevDelta, prevDelta) - minDist * minDist;
-		if (cCoeff <= 0) {
-			const normal = normalize(prevDelta);
-			return { time: 0, normal };
+		const prevDist = length(prevDelta);
+		if (prevDist > 1e-8 && prevDist <= minDist) {
+			return { time: 0, normal: scale(prevDelta, 1 / prevDist) };
 		}
 
+		const aCoeff = dot(relativeMove, relativeMove);
+		const currentDelta = sub(b.position, a.position);
+		const currentDist = length(currentDelta);
+		if (aCoeff < 1e-12) {
+			if (currentDist > 1e-8 && currentDist <= minDist) {
+				return { time: 1, normal: scale(currentDelta, 1 / currentDist) };
+			}
+			return null;
+		}
+
+		const bCoeff = 2 * dot(prevDelta, relativeMove);
+		const cCoeff = dot(prevDelta, prevDelta) - minDist * minDist;
+		if (cCoeff <= 0) {
+			return { time: 0, normal: normalize(prevDelta) };
+		}
+		if (bCoeff >= 0) return null;
+
 		const discriminant = bCoeff * bCoeff - 4 * aCoeff * cCoeff;
-		if (discriminant < 0) return null;
+		if (discriminant >= 0) {
+			const time = (-bCoeff - Math.sqrt(discriminant)) / (2 * aCoeff);
+			if (time >= 0 && time <= 1) {
+				const impactDelta = {
+					x: prevDelta.x + relativeMove.x * time,
+					y: prevDelta.y + relativeMove.y * time,
+				};
+				return { time, normal: normalize(impactDelta) };
+			}
+		}
 
-		const time = (-bCoeff - Math.sqrt(discriminant)) / (2 * aCoeff);
-		if (time < 0 || time > 1) return null;
-
-		const impactDelta = {
-			x: prevDelta.x + relativeMove.x * time,
-			y: prevDelta.y + relativeMove.y * time,
-		};
-		return { time, normal: normalize(impactDelta) };
+		// 부동소수점 오차로 정확한 첫 접촉점을 놓친 경우에만 현재 겹침을 fallback으로 사용
+		if (currentDist > 1e-8 && currentDist <= minDist) {
+			return { time: 1, normal: scale(currentDelta, 1 / currentDist) };
+		}
+		return null;
 	}
 
 	private interpolate(from: Vec2, to: Vec2, time: number): Vec2 {
@@ -723,10 +742,10 @@ export class Simulation2D {
 		const key = `cushion:${ball.id}:${side}`;
 		if (seenContacts.has(key)) return;
 		seenContacts.add(key);
-		events.push({
+			events.push({
 			type: "cushion-hit",
 			step,
-			position: this.toNormalized(ball.position),
+			position: { ...ball.position },
 			ballId: ball.id,
 			cushionSide: side,
 		});
@@ -742,10 +761,10 @@ export class Simulation2D {
 		const key = `ball:${[a.id, b.id].sort().join(":")}`;
 		if (seenContacts.has(key)) return;
 		seenContacts.add(key);
-		const position = this.toNormalized({
+		const position = {
 			x: (a.position.x + b.position.x) / 2,
 			y: (a.position.y + b.position.y) / 2,
-		});
+		};
 		events.push({
 			type: "ball-collision",
 			step,
@@ -814,20 +833,6 @@ export class Simulation2D {
 		};
 	}
 
-	private toMeter(point: Point): Vec2 {
-		return {
-			x: (point.x / NORMALIZED_SIZE) * TABLE_WIDTH_M,
-			y: (point.y / NORMALIZED_SIZE) * TABLE_HEIGHT_M,
-		};
-	}
-
-	private toNormalized(position: Vec2): Point {
-		return {
-			x: (position.x / TABLE_WIDTH_M) * NORMALIZED_SIZE,
-			y: (position.y / TABLE_HEIGHT_M) * NORMALIZED_SIZE,
-		};
-	}
-
 	private clampToTable(position: Vec2): Vec2 {
 		return {
 			x: clamp(position.x, POSITION_MARGIN_M, TABLE_WIDTH_M - POSITION_MARGIN_M),
@@ -842,7 +847,7 @@ export class Simulation2D {
 	}
 
 	private normalizeTipOffset(offsetMm: number): number {
-		// UI의 +/-60mm 입력을 최대 스핀으로 보고, 외부 감지 노이즈는 -1~1로 제한
+		// UI의 스핀 입력을 기준값 대비 비율로 바꾸고, 과도한 입력만 제한합니다.
 		if (!Number.isFinite(offsetMm)) return 0;
 		if (this.tuning.spinInputReferenceMm <= 0) return 0;
 

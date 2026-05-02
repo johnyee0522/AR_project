@@ -255,6 +255,21 @@
 	width: 100%;
 }
 
+.sliderInputRow {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 58px;
+	align-items: center;
+	gap: 6px;
+}
+
+.powerSliderMeta {
+	display: flex;
+	justify-content: space-between;
+	color: rgba(255, 255, 255, 0.45);
+	font-size: 9px;
+	font-weight: 700;
+}
+
 .numberInput {
 	width: 100%;
 	box-sizing: border-box;
@@ -267,7 +282,24 @@
 	outline: none;
 }
 
+.compactNumberInput {
+	width: 58px;
+	box-sizing: border-box;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 6px;
+	background-color: rgba(0, 0, 0, 0.35);
+	color: white;
+	font-size: 10px;
+	padding: 5px 6px;
+	outline: none;
+}
+
 .numberInput:focus {
+	border-color: rgba(0, 229, 255, 0.65);
+	box-shadow: 0 0 8px rgba(0, 229, 255, 0.18);
+}
+
+.compactNumberInput:focus {
 	border-color: rgba(0, 229, 255, 0.65);
 	box-shadow: 0 0 8px rgba(0, 229, 255, 0.18);
 }
@@ -299,31 +331,97 @@
 	box-shadow: 0 0 8px rgba(0, 229, 255, 0.28);
 }
 
-.spinDirectionGroup {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 4px;
-	background-color: rgba(0, 0, 0, 0.35);
-	border-radius: 8px;
-	padding: 3px;
+.spinPadRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
 }
 
-.spinDirectionButton {
+.spinPad {
+	position: relative;
+	width: 92px;
+	aspect-ratio: 1;
+	border: none;
+	border-radius: 50%;
+	background:
+		radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.95), rgba(230, 238, 242, 0.9) 35%, rgba(165, 181, 190, 0.92) 100%);
+	box-shadow:
+		inset -10px -12px 18px rgba(0, 0, 0, 0.2),
+		inset 8px 8px 14px rgba(255, 255, 255, 0.65),
+		0 0 0 2px rgba(255, 255, 255, 0.18);
+	cursor: pointer;
+	touch-action: none;
+}
+
+.spinPad::before {
+	content: "";
+	position: absolute;
+	inset: 18%;
+	border: 1px dashed rgba(0, 0, 0, 0.28);
+	border-radius: 50%;
+}
+
+.spinGuideHorizontal,
+.spinGuideVertical {
+	position: absolute;
+	background-color: rgba(0, 0, 0, 0.24);
+	pointer-events: none;
+}
+
+.spinGuideHorizontal {
+	left: 13%;
+	right: 13%;
+	top: 50%;
+	height: 1px;
+}
+
+.spinGuideVertical {
+	top: 13%;
+	bottom: 13%;
+	left: 50%;
+	width: 1px;
+}
+
+.spinMarker {
+	position: absolute;
+	width: 13px;
+	height: 13px;
+	border-radius: 50%;
+	background-color: #ff4757;
+	border: 2px solid white;
+	box-shadow: 0 0 10px rgba(255, 71, 87, 0.65);
+	transform: translate(-50%, -50%);
+	pointer-events: none;
+}
+
+.spinResetButton {
+	width: 52px;
 	height: 28px;
 	border: none;
 	border-radius: 6px;
-	background-color: transparent;
-	color: rgba(255, 255, 255, 0.55);
-	font-size: 12px;
+	background-color: rgba(255, 255, 255, 0.1);
+	color: rgba(255, 255, 255, 0.8);
+	font-size: 11px;
 	font-weight: 700;
 	cursor: pointer;
-	transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.spinDirectionButton.active {
-	background-color: rgba(255, 71, 87, 0.22);
-	color: #ff7380;
-	box-shadow: 0 0 8px rgba(255, 71, 87, 0.28);
+.spinInputGrid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+}
+
+.spinInputGrid label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.spinInputGrid span {
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 9px;
+	font-weight: 700;
 }
 
 /* 에러 메시지 */

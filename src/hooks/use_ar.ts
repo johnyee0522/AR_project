@@ -59,8 +59,8 @@ function getTableViewport(canvas: HTMLCanvasElement): TableViewport {
 
 function toCanvasPoint(point: Point, viewport: TableViewport): PixelPoint {
 	return {
-		x: viewport.x + (point.x / 1000) * viewport.width,
-		y: viewport.y + (point.y / 1000) * viewport.height,
+		x: viewport.x + point.x * viewport.pixelsPerMeter,
+		y: viewport.y + point.y * viewport.pixelsPerMeter,
 	};
 }
 

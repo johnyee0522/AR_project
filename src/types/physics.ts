@@ -1,7 +1,11 @@
+// 앱 전체에서 쓰는 당구대 meter 좌표입니다.
+// x는 0~TABLE_WIDTH_M, y는 0~TABLE_HEIGHT_M 범위를 사용합니다.
 export interface Point {
 	x: number;
 	y: number;
 }
+
+export type MeterPoint = Point;
 
 export interface BallTrajectory {
 	ballId: string;

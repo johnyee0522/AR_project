@@ -21,9 +21,9 @@ function Main() {
 
 	const [gameState, setGameState] = useState({
 		balls: {
-			cue: { x: 200, y: 750 },
-			red: { x: 500, y: 500 },
-			yellow: { x: 700, y: 300 },
+			cue: { x: 0.57, y: 1.07 },
+			red: { x: 1.42, y: 0.71 },
+			yellow: { x: 1.99, y: 0.43 },
 		},
 		angle: 45,
 		power: 0.5,
@@ -38,7 +38,7 @@ function Main() {
 		minimapCanvasRef,
 		containerRef,
 	});
-	const { sim } = useSimulation();
+	const { sim, tuningVersion } = useSimulation();
 
 	const handleFrame = useCallback(
 		(detected: DetectedState | null) => {
@@ -51,15 +51,16 @@ function Main() {
 				power,
 				sideSpin,
 				topBottomSpin,
+				tuningVersion,
 			});
 
 			let physicsResult = predictionCacheRef.current?.result;
 			if (!physicsResult || predictionCacheRef.current?.key !== predictionKey) {
-				sim.updateBallPositions(balls);
+				sim.updateBallPositionsMeters(balls);
 				physicsResult = sim.predict(
 					angle,
 					power,
-					1200,
+					2400,
 					sideSpin,
 					topBottomSpin,
 				);
@@ -77,7 +78,7 @@ function Main() {
 
 			drawAR(physicsResult);
 		},
-		[drawAR, sim, gameState],
+		[drawAR, sim, gameState, tuningVersion],
 	);
 
 	const { cameraReady, errorMsg } = useCamera({
