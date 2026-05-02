@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { PhysicsResult } from "@/types/physics";
 import logger from "@/lib/logger";
+import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "@/lib/physics/physics_constants";
+import type { PhysicsResult, Point } from "@/types/physics";
 
 interface UseAROptions {
 	arCanvasRef: RefObject<HTMLCanvasElement | null>;
@@ -15,6 +16,19 @@ interface UseARReturn {
 	drawAR: (result: PhysicsResult | null) => void;
 }
 
+interface PixelPoint {
+	x: number;
+	y: number;
+}
+
+interface TableViewport {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	pixelsPerMeter: number;
+}
+
 const BALL_COLORS: Record<string, string> = {
 	cue: "#ffffff",
 	red: "#ff4757",
@@ -26,9 +40,30 @@ function getBallColor(ballId: string): string {
 	return BALL_COLORS[ballId] ?? FALLBACK_COLOR;
 }
 
-/**
- * AR 오버레이(궤적선 및 미니맵) 렌더링을 담당하는 훅
- */
+function getTableViewport(canvas: HTMLCanvasElement): TableViewport {
+	const pixelsPerMeter = Math.min(
+		canvas.width / TABLE_WIDTH_M,
+		canvas.height / TABLE_HEIGHT_M,
+	);
+	const width = TABLE_WIDTH_M * pixelsPerMeter;
+	const height = TABLE_HEIGHT_M * pixelsPerMeter;
+
+	return {
+		x: (canvas.width - width) / 2,
+		y: (canvas.height - height) / 2,
+		width,
+		height,
+		pixelsPerMeter,
+	};
+}
+
+function toCanvasPoint(point: Point, viewport: TableViewport): PixelPoint {
+	return {
+		x: viewport.x + (point.x / 1000) * viewport.width,
+		y: viewport.y + (point.y / 1000) * viewport.height,
+	};
+}
+
 function useAR({
 	arCanvasRef,
 	minimapCanvasRef,
@@ -50,19 +85,15 @@ function useAR({
 		return () => window.removeEventListener("resize", handleResize);
 	}, [arCanvasRef, containerRef]);
 
-	/** AR 시각화 모드 토글 */
 	const toggleARMode = useCallback(() => {
 		setIsARMode((prev) => {
 			const next = !prev;
 			isARModeRef.current = next;
-			logger.info(next ? "AR 모드 시작" : "AR 모드 종료");
+			logger.info(next ? "AR mode enabled" : "AR mode disabled");
 			return next;
 		});
 	}, []);
 
-	/**
-	 * 물리 엔진 결과를 바탕으로 AR 궤적 및 미니맵 포인트 렌더링
-	 */
 	const drawAR = useCallback(
 		(result: PhysicsResult | null) => {
 			const canvas = arCanvasRef.current;
@@ -78,42 +109,46 @@ function useAR({
 
 			if (!isARModeRef.current || !result) return;
 
-			const scaleX = minimapCanvas.width / canvas.width;
-			const scaleY = minimapCanvas.height / canvas.height;
+			const arViewport = getTableViewport(canvas);
+			const minimapViewport = getTableViewport(minimapCanvas);
 
-			// 물리적 충돌 지점과 일치시키기 위한 시각적 공 반지름 보정
-			const minimapBallRadiusPx = (minimapCanvas.width / 70) * 3;
+			drawTableBounds(mCtx, minimapViewport);
 
 			for (const trajectory of result.trajectories) {
 				const color = getBallColor(trajectory.ballId);
-				const scaledWaypoints = trajectory.waypoints.map((p) => ({
-					x: (p.x / 1000) * canvas.width,
-					y: (p.y / 1000) * canvas.height,
-				}));
+				const arWaypoints = trajectory.waypoints.map((point) =>
+					toCanvasPoint(point, arViewport),
+				);
+				const minimapWaypoints = trajectory.waypoints.map((point) =>
+					toCanvasPoint(point, minimapViewport),
+				);
 
-				if (scaledWaypoints.length === 0) continue;
+				if (minimapWaypoints.length === 0) continue;
 
-				// 1. 메인 AR 캔버스 그리기 (생략 - 향후 탑뷰 변환 오버레이로 대체 예정)
+				if (arWaypoints.length >= 2) {
+					const dashSize = Math.max(6, arViewport.pixelsPerMeter * 0.035);
+					drawTrajectoryLine(ctx, arWaypoints, color, {
+						dashed: true,
+						dashPattern: [dashSize, dashSize],
+						lineWidth: 2,
+						glow: true,
+					});
+				}
 
-				// 2. 미니맵 그리기
-				const minimapWaypoints = scaledWaypoints.map((p) => ({
-					x: p.x * scaleX,
-					y: p.y * scaleY,
-				}));
 				if (minimapWaypoints.length >= 2) {
-					// 미니맵 크기에 비례하여 점선 간격 조절 (기본 4, 확대 시 약 6으로 더 촘촘하게)
-					const dashSize = (minimapCanvas.width / 70) * 1.33 + 2.67;
+					const dashSize = Math.max(3, minimapViewport.pixelsPerMeter * 0.04);
 					drawTrajectoryLine(mCtx, minimapWaypoints, color, {
 						dashed: true,
 						dashPattern: [dashSize, dashSize],
 						lineWidth: 1,
 					});
 				}
+
 				drawBallPoint(
 					mCtx,
 					minimapWaypoints[0],
 					color,
-					minimapBallRadiusPx,
+					Math.max(2.5, minimapViewport.pixelsPerMeter * 0.028575),
 					false,
 				);
 			}
@@ -124,13 +159,27 @@ function useAR({
 	return { isARMode, toggleARMode, drawAR };
 }
 
-/* 캔버스 드로잉 유틸리티 */
+function drawTableBounds(
+	ctx: CanvasRenderingContext2D,
+	viewport: TableViewport,
+) {
+	ctx.save();
+	ctx.strokeStyle = "rgba(0, 229, 255, 0.35)";
+	ctx.lineWidth = 1;
+	ctx.strokeRect(viewport.x, viewport.y, viewport.width, viewport.height);
+	ctx.restore();
+}
 
 function drawTrajectoryLine(
 	ctx: CanvasRenderingContext2D,
-	points: { x: number; y: number }[],
+	points: PixelPoint[],
 	color: string,
-	options: { dashed?: boolean; dashPattern?: number[]; lineWidth: number; glow?: boolean },
+	options: {
+		dashed?: boolean;
+		dashPattern?: number[];
+		lineWidth: number;
+		glow?: boolean;
+	},
 ) {
 	ctx.save();
 	ctx.strokeStyle = color;
@@ -154,7 +203,7 @@ function drawTrajectoryLine(
 
 function drawBallPoint(
 	ctx: CanvasRenderingContext2D,
-	point: { x: number; y: number },
+	point: PixelPoint,
 	color: string,
 	radius: number,
 	glow: boolean,

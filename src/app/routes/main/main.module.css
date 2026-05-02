@@ -114,7 +114,7 @@
 	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* OpenCV 로딩 오버레이 */
+/* 카메라 로딩 오버레이 */
 .loadingOverlay {
 	position: absolute;
 	top: 0;
@@ -253,6 +253,77 @@
 
 .testGroup input[type="range"] {
 	width: 100%;
+}
+
+.numberInput {
+	width: 100%;
+	box-sizing: border-box;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 6px;
+	background-color: rgba(0, 0, 0, 0.35);
+	color: white;
+	font-size: 11px;
+	padding: 6px 8px;
+	outline: none;
+}
+
+.numberInput:focus {
+	border-color: rgba(0, 229, 255, 0.65);
+	box-shadow: 0 0 8px rgba(0, 229, 255, 0.18);
+}
+
+.powerLevelGroup {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 4px;
+	background-color: rgba(0, 0, 0, 0.35);
+	border-radius: 8px;
+	padding: 3px;
+}
+
+.powerLevelButton {
+	height: 28px;
+	border: none;
+	border-radius: 6px;
+	background-color: transparent;
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.powerLevelButton.active {
+	background-color: rgba(0, 229, 255, 0.22);
+	color: #00e5ff;
+	box-shadow: 0 0 8px rgba(0, 229, 255, 0.28);
+}
+
+.spinDirectionGroup {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 4px;
+	background-color: rgba(0, 0, 0, 0.35);
+	border-radius: 8px;
+	padding: 3px;
+}
+
+.spinDirectionButton {
+	height: 28px;
+	border: none;
+	border-radius: 6px;
+	background-color: transparent;
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 12px;
+	font-weight: 700;
+	cursor: pointer;
+	transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.spinDirectionButton.active {
+	background-color: rgba(255, 71, 87, 0.22);
+	color: #ff7380;
+	box-shadow: 0 0 8px rgba(255, 71, 87, 0.28);
 }
 
 /* 에러 메시지 */

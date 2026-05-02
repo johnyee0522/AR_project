@@ -7,9 +7,7 @@ interface ARButtonProps {
 	onClick: () => void;
 }
 
-/**
- * AR 시작/종료 버튼
- */
+/** AR 시작/종료 버튼 */
 function ARButton({ isARMode, onClick }: ARButtonProps) {
 	return (
 		<button

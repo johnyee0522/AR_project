@@ -15,8 +15,8 @@ function Minimap({ visible, ref }: MinimapProps) {
 	const [isEnlarged, setIsEnlarged] = useState(false);
 
 	// 기본 70x120, 확대 시 2.5배 (175x300)
-	const width = isEnlarged ? 175 : 70;
-	const height = isEnlarged ? 300 : 120;
+	const width = isEnlarged ? 300 : 120;
+	const height = isEnlarged ? 150 : 60;
 
 	return (
 		<div

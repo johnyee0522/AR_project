@@ -1,27 +1,24 @@
-import { useRef, useCallback, useState } from "react";
-import type { DebugView } from "@/lib/cuebit";
-import useCamera, { type DetectedState } from "@/hooks/use_camera";
-import useAR from "@/hooks/use_ar";
-import useSimulation from "@/hooks/use_simulation";
+import { useCallback, useRef, useState } from "react";
 import ARButton from "@/components/ar_button/ar_button";
-import Minimap from "@/components/minimap/minimap";
-import DebugViewToggle from "@/components/debug_view_toggle/debug_view_toggle";
 import DevLog from "@/components/dev_log/dev_log";
+import Minimap from "@/components/minimap/minimap";
+import useAR from "@/hooks/use_ar";
+import useCamera, { type DetectedState } from "@/hooks/use_camera";
+import useSimulation from "@/hooks/use_simulation";
+import type { PhysicsResult } from "@/types/physics";
 import TestPanel from "./test_panel";
 import styles from "./main.module.css";
 
-/**
- * 메인 애플리케이션 화면: 카메라 비전, 물리 시뮬레이션 및 AR 오버레이 통합
- */
 function Main() {
 	const videoCanvasRef = useRef<HTMLCanvasElement>(null);
 	const arCanvasRef = useRef<HTMLCanvasElement>(null);
 	const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const predictionCacheRef = useRef<{
+		key: string;
+		result: PhysicsResult;
+	} | null>(null);
 
-	const [debugView, setDebugView] = useState<DebugView>("original");
-
-	// 시뮬레이션 파라미터를 위한 게임 상태
 	const [gameState, setGameState] = useState({
 		balls: {
 			cue: { x: 200, y: 750 },
@@ -34,41 +31,57 @@ function Main() {
 		topBottomSpin: 0,
 	});
 	const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
+	const [cueTravelMeters, setCueTravelMeters] = useState(0);
 
 	const { isARMode, toggleARMode, drawAR } = useAR({
 		arCanvasRef,
 		minimapCanvasRef,
 		containerRef,
 	});
-
 	const { sim } = useSimulation();
 
-	/**
-	 * 각 카메라 프레임 처리: 물리 월드 업데이트 및 AR 시각화 드로잉
-	 */
 	const handleFrame = useCallback(
 		(detected: DetectedState | null) => {
-			if (!sim) {
-				drawAR(null);
-				return;
-			}
-
-			// 비전 엔진에서 감지된 공 위치를 수동 설정값보다 우선시함
 			const balls = detected?.balls || gameState.balls;
 			const angle = detected?.angle ?? gameState.angle;
 			const { power, sideSpin, topBottomSpin } = gameState;
+			const predictionKey = JSON.stringify({
+				balls,
+				angle,
+				power,
+				sideSpin,
+				topBottomSpin,
+			});
 
-			sim.updateBallPositions(balls);
-			const physicsResult = sim.predict(angle, power, 4000, sideSpin, topBottomSpin);
+			let physicsResult = predictionCacheRef.current?.result;
+			if (!physicsResult || predictionCacheRef.current?.key !== predictionKey) {
+				sim.updateBallPositions(balls);
+				physicsResult = sim.predict(
+					angle,
+					power,
+					1200,
+					sideSpin,
+					topBottomSpin,
+				);
+				predictionCacheRef.current = {
+					key: predictionKey,
+					result: physicsResult,
+				};
+			}
+
+			const nextCueTravel =
+				physicsResult.summary?.travelDistanceByBall["cue"] ?? 0;
+			setCueTravelMeters((prev) =>
+				Math.abs(prev - nextCueTravel) > 0.005 ? nextCueTravel : prev,
+			);
 
 			drawAR(physicsResult);
 		},
 		[drawAR, sim, gameState],
 	);
 
-	const { cvLoaded, errorMsg } = useCamera({
+	const { cameraReady, errorMsg } = useCamera({
 		videoCanvasRef,
-		debugView,
 		onFrame: handleFrame,
 		testProps: {
 			cue: gameState.balls.cue,
@@ -82,11 +95,12 @@ function Main() {
 		<div ref={containerRef} className={styles.container}>
 			<canvas ref={videoCanvasRef} className={styles.videoCanvas} />
 
-			{/* 로딩 오버레이 */}
-			{!cvLoaded && (
+			{!cameraReady && (
 				<div className={styles.loadingOverlay}>
 					<div className={styles.spinner} />
-					<p className={styles.loadingText}>AI 비전 엔진 로딩 중...</p>
+					<p className={styles.loadingText}>
+						{"\uce74\uba54\ub77c \uc900\ube44 \uc911..."}
+					</p>
 				</div>
 			)}
 
@@ -99,17 +113,21 @@ function Main() {
 					<h1 className={styles.title}>
 						Cue<span className={styles.titleAccent}>bit</span>
 					</h1>
-					<p className={styles.subtitle}>실시간 궤적 가이드</p>
+					<p className={styles.subtitle}>
+						{"\uc2e4\uc2dc\uac04 \uada4\uc801 \uac00\uc774\ub4dc"}
+					</p>
 				</div>
-				{isARMode && cvLoaded && (
+				{isARMode && cameraReady && (
 					<div className={styles.analyzingBadge}>
 						<div className={styles.analyzingDot} />
-						<span className={styles.analyzingText}>실시간 분석 중...</span>
+						<span className={styles.analyzingText}>
+							{"\uc2e4\uc2dc\uac04 \uc608\uce21 \uc911"}
+						</span>
 					</div>
 				)}
 			</div>
 
-			<Minimap ref={minimapCanvasRef} visible={isARMode && cvLoaded} />
+			<Minimap ref={minimapCanvasRef} visible={isARMode && cameraReady} />
 
 			{isTestPanelOpen && (
 				<TestPanel
@@ -120,6 +138,7 @@ function Main() {
 					power={gameState.power}
 					sideSpin={gameState.sideSpin}
 					topBottomSpin={gameState.topBottomSpin}
+					cueTravelMeters={cueTravelMeters}
 					onCueChange={(pos) =>
 						setGameState((prev) => ({
 							...prev,
@@ -160,14 +179,16 @@ function Main() {
 						<span className={styles.debugLabel}>TEST</span>
 						<div className={styles.debugTrack}>
 							<button
-								className={`${styles.openTestBtn} ${isTestPanelOpen ? styles.active : ""}`}
+								type="button"
+								className={`${styles.openTestBtn} ${
+									isTestPanelOpen ? styles.active : ""
+								}`}
 								onClick={() => setIsTestPanelOpen((prev) => !prev)}
 							>
-								패널
+								Panel
 							</button>
 						</div>
 					</div>
-					<DebugViewToggle current={debugView} onChange={setDebugView} />
 				</div>
 				<ARButton isARMode={isARMode} onClick={toggleARMode} />
 			</div>
