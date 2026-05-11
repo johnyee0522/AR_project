@@ -18,7 +18,7 @@ interface TestPanelProps {
 	angle: number;
 	power: number;
 	sideSpin: number;
-	topBottomSpin: number;
+	topSpin: number;
 	cueTravelMeters: number;
 	onCueChange: (pos: BallPos) => void;
 	onObj1Change: (pos: BallPos) => void;
@@ -26,7 +26,7 @@ interface TestPanelProps {
 	onAngleChange: (angle: number) => void;
 	onPowerChange: (power: number) => void;
 	onSideSpinChange: (sideSpin: number) => void;
-	onTopBottomSpinChange: (topBottomSpin: number) => void;
+	onTopSpinChange: (topSpin: number) => void;
 	onClose: () => void;
 }
 
@@ -51,7 +51,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	angle,
 	power,
 	sideSpin,
-	topBottomSpin,
+	topSpin,
 	cueTravelMeters,
 	onCueChange,
 	onObj1Change,
@@ -59,7 +59,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	onAngleChange,
 	onPowerChange,
 	onSideSpinChange,
-	onTopBottomSpinChange,
+	onTopSpinChange,
 	onClose,
 }) => {
 	const [position, setPosition] = useState({ x: 15, y: 150 });
@@ -138,7 +138,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 		const clampedY = distance > 1 ? rawY / distance : rawY;
 
 		onSideSpinChange(Math.round(clampedX * MAX_SPIN_OFFSET_MM));
-		onTopBottomSpinChange(Math.round(-clampedY * MAX_SPIN_OFFSET_MM));
+		onTopSpinChange(Math.round(-clampedY * MAX_SPIN_OFFSET_MM));
 	};
 
 	const updateSideSpin = (value: number) => {
@@ -148,7 +148,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	};
 
 	const updateTopBottomSpin = (value: number) => {
-		onTopBottomSpinChange(
+		onTopSpinChange(
 			Math.round(clampValue(value, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM)),
 		);
 	};
@@ -176,7 +176,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 
 	const resetSpin = () => {
 		onSideSpinChange(0);
-		onTopBottomSpinChange(0);
+		onTopSpinChange(0);
 	};
 
 	const spinMarkerX =
@@ -186,7 +186,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 			50;
 	const spinMarkerY =
 		50 -
-		(clampValue(topBottomSpin, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM) /
+		(clampValue(topSpin, -MAX_SPIN_OFFSET_MM, MAX_SPIN_OFFSET_MM) /
 			MAX_SPIN_OFFSET_MM) *
 			50;
 
@@ -309,7 +309,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 
 			<div className={styles.testGroup}>
 				<label>
-					{`\uc2a4\ud540: \uc88c/\uc6b0 ${sideSpin}mm, \uc0c1/\ud558 ${topBottomSpin}mm`}
+					{`\uc2a4\ud540: \uc88c/\uc6b0 ${sideSpin}mm, \uc0c1/\ud558 ${topSpin}mm`}
 				</label>
 				<div className={styles.spinPadRow} data-no-panel-drag>
 					<button
@@ -357,7 +357,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 							min={-MAX_SPIN_OFFSET_MM}
 							max={MAX_SPIN_OFFSET_MM}
 							step="1"
-							value={topBottomSpin}
+							value={topSpin}
 							onChange={(e) => updateTopBottomSpin(Number(e.target.value))}
 						/>
 					</label>

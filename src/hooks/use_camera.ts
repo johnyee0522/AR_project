@@ -2,16 +2,8 @@ import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import createFrameCapture from "@/lib/capture";
 import logger from "@/lib/logger";
+import type { DetectedState } from "@/types/detection";
 import type { Point } from "@/types/physics";
-
-export interface DetectedState {
-	balls: {
-		cue: Point;
-		red: Point;
-		yellow: Point;
-	};
-	angle: number;
-}
 
 interface UseCameraOptions {
 	videoCanvasRef: RefObject<HTMLCanvasElement | null>;
@@ -21,6 +13,9 @@ interface UseCameraOptions {
 		obj1: Point;
 		obj2: Point;
 		angle: number;
+		power: number;
+		sideSpin: number;
+		topSpin: number;
 	};
 }
 
@@ -76,12 +71,22 @@ function useCamera({
 				const loop = () => {
 					if (ac.signal.aborted) return;
 					onFrameRef.current({
-						balls: {
-							cue: testPropsRef.current.cue,
-							red: testPropsRef.current.obj1,
-							yellow: testPropsRef.current.obj2,
+						cue: {
+							angleDeg: testPropsRef.current.angle,
+							power: testPropsRef.current.power,
+							hitPoint: {
+								x: testPropsRef.current.sideSpin / 100,
+								y: testPropsRef.current.topSpin / 100,
+							},
 						},
-						angle: testPropsRef.current.angle,
+						shot: {
+							cueBallId: "cue",
+						},
+						balls: [
+							{ id: "cue", ...testPropsRef.current.cue },
+							{ id: "red", ...testPropsRef.current.obj1 },
+							{ id: "yellow", ...testPropsRef.current.obj2 },
+						],
 					});
 					rAFId = requestAnimationFrame(loop);
 				};
@@ -121,6 +126,9 @@ function useCamera({
 						layout: [{ offset: 0, stride: frameCapture.width * 4 }],
 					});
 					drawer.draw(buffer);
+
+					// YOLO/ONNXRuntime 팀이 연결할 지점입니다.
+					// 프레임을 homography로 보정한 뒤 meter 좌표의 DetectedState를 넘기면 됩니다.
 					onFrameRef.current(null);
 				});
 			} catch (err) {

@@ -3,8 +3,10 @@ import ARButton from "@/components/ar_button/ar_button";
 import DevLog from "@/components/dev_log/dev_log";
 import Minimap from "@/components/minimap/minimap";
 import useAR from "@/hooks/use_ar";
-import useCamera, { type DetectedState } from "@/hooks/use_camera";
+import useCamera from "@/hooks/use_camera";
 import useSimulation from "@/hooks/use_simulation";
+import { detectedStateToPredictShotInput } from "@/lib/physics";
+import type { DetectedState } from "@/types/detection";
 import type { PhysicsResult } from "@/types/physics";
 import TestPanel from "./test_panel";
 import styles from "./main.module.css";
@@ -28,7 +30,7 @@ function Main() {
 		angle: 45,
 		power: 0.5,
 		sideSpin: 0,
-		topBottomSpin: 0,
+		topSpin: 0,
 	});
 	const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
 	const [cueTravelMeters, setCueTravelMeters] = useState(0);
@@ -42,27 +44,30 @@ function Main() {
 
 	const handleFrame = useCallback(
 		(detected: DetectedState | null) => {
-			const balls = detected?.balls || gameState.balls;
-			const angle = detected?.angle ?? gameState.angle;
-			const { power, sideSpin, topBottomSpin } = gameState;
+			const predictInput = detected
+				? detectedStateToPredictShotInput(detected)
+				: {
+						balls: gameState.balls,
+						angle: gameState.angle,
+						power: gameState.power,
+						sideSpin: gameState.sideSpin,
+						topSpin: gameState.topSpin,
+						maxSteps: 2400,
+					};
 			const predictionKey = JSON.stringify({
-				balls,
-				angle,
-				power,
-				sideSpin,
-				topBottomSpin,
+				predictInput,
 				tuningVersion,
 			});
 
 			let physicsResult = predictionCacheRef.current?.result;
 			if (!physicsResult || predictionCacheRef.current?.key !== predictionKey) {
-				sim.updateBallPositionsMeters(balls);
+				sim.updateBallPositionsMeters(predictInput.balls);
 				physicsResult = sim.predict(
-					angle,
-					power,
-					2400,
-					sideSpin,
-					topBottomSpin,
+					predictInput.angle,
+					predictInput.power,
+					predictInput.maxSteps,
+					predictInput.sideSpin,
+					predictInput.topSpin,
 				);
 				predictionCacheRef.current = {
 					key: predictionKey,
@@ -89,6 +94,9 @@ function Main() {
 			obj1: gameState.balls.red,
 			obj2: gameState.balls.yellow,
 			angle: gameState.angle,
+			power: gameState.power,
+			sideSpin: gameState.sideSpin,
+			topSpin: gameState.topSpin,
 		},
 	});
 
@@ -138,7 +146,7 @@ function Main() {
 					angle={gameState.angle}
 					power={gameState.power}
 					sideSpin={gameState.sideSpin}
-					topBottomSpin={gameState.topBottomSpin}
+					topSpin={gameState.topSpin}
 					cueTravelMeters={cueTravelMeters}
 					onCueChange={(pos) =>
 						setGameState((prev) => ({
@@ -167,8 +175,8 @@ function Main() {
 					onSideSpinChange={(sideSpin) =>
 						setGameState((prev) => ({ ...prev, sideSpin }))
 					}
-					onTopBottomSpinChange={(topBottomSpin) =>
-						setGameState((prev) => ({ ...prev, topBottomSpin }))
+					onTopSpinChange={(topSpin) =>
+						setGameState((prev) => ({ ...prev, topSpin }))
 					}
 					onClose={() => setIsTestPanelOpen(false)}
 				/>

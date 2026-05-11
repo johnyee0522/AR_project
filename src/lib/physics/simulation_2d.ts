@@ -1,6 +1,5 @@
 import type {
 	CushionSide,
-	MeterPoint,
 	PhysicsEvent,
 	PhysicsResult,
 	Point,
@@ -23,6 +22,10 @@ import {
 	type Vec2,
 } from "./vector2";
 
+const MIN_POWER = 0;
+const MAX_POWER = 3;
+const DEFAULT_MAX_STEPS = 2400;
+
 export interface Simulation2DTuning {
 	impulseScale: number;
 	rollingFriction: number;
@@ -32,6 +35,12 @@ export interface Simulation2DTuning {
 	cushionSpinTransfer: number;
 	ballSpinTransfer: number;
 	followDrawTransfer: number;
+	followDrawMotionTransfer: number;
+	cutThrowTransfer: number;
+	maxSpinCorrectionSpeed: number;
+	maxCushionSpinCorrectionRatio: number;
+	cushionSpinRetention: number;
+	ballSpinRetention: number;
 	spinInputReferenceMm: number;
 	maxSpinRatio: number;
 	sideSpinStrength: number;
@@ -58,6 +67,18 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	ballSpinTransfer: 0.01,
 	// 상/하 스핀이 충돌 후 수구 움직임에 주는 영향
 	followDrawTransfer: 0.28,
+	// 상/하 스핀이 충돌 전 이동거리와 감속에 주는 영향
+	followDrawMotionTransfer: 0.18,
+	// 컷샷에서 공-공 마찰이 목적구 각도에 주는 작은 영향
+	cutThrowTransfer: 0.035,
+	// 스핀 보정이 한 번의 충돌에서 속도를 과하게 바꾸지 못하게 막는 최대값
+	maxSpinCorrectionSpeed: 0.45,
+	// 좌우 스핀이 쿠션 반사 접선 속도에 줄 수 있는 최대 비율
+	maxCushionSpinCorrectionRatio: 0.35,
+	// 쿠션에 맞은 뒤 남는 좌우 스핀 비율
+	cushionSpinRetention: 0.72,
+	// 공과 공이 부딪힌 뒤 수구에 남는 스핀 비율
+	ballSpinRetention: 0.68,
 	// UI에서 입력한 스핀 거리(mm)를 내부 스핀 비율로 바꾸는 기준값
 	spinInputReferenceMm: 60,
 	// 기준값보다 큰 스핀 입력을 허용할 때의 최대 스핀 비율
@@ -91,6 +112,13 @@ interface SavedState {
 	balls: Map<string, BallState>;
 }
 
+interface BallAdvanceResult {
+	usedTime: number;
+	collided: boolean;
+}
+
+type ContactState = Set<string>;
+
 export class Simulation2D {
 	private tuning: Simulation2DTuning;
 	private balls: Map<string, BallState> = new Map();
@@ -108,7 +136,7 @@ export class Simulation2D {
 	}
 
 	public updateBallPositionsMeters(
-		ballPositions: Record<string, MeterPoint>,
+		ballPositions: Record<string, Point>,
 	): void {
 		const liveIds = new Set(Object.keys(ballPositions));
 
@@ -141,7 +169,7 @@ export class Simulation2D {
 	public predict(
 		angleDeg: number,
 		power: number,
-		maxSteps = 2400,
+		maxSteps = DEFAULT_MAX_STEPS,
 		offsetSide = 0,
 		offsetTop = 0,
 	): PhysicsResult {
@@ -151,18 +179,31 @@ export class Simulation2D {
 		// 예측 중에는 속도를 위해 월드 상태를 직접 변경
 		// 예측이 끝나면 원래 상태로 복구해서 렌더 루프에서 반복 호출해도 결과가 안정적
 		const saved = this.saveState();
-		const angleRad = (angleDeg * Math.PI) / 180;
+		const safeAngleDeg = Number.isFinite(angleDeg) ? angleDeg : 0;
+		const safePower = clamp(
+			Number.isFinite(power) ? power : 0,
+			MIN_POWER,
+			MAX_POWER,
+		);
+		const safeMaxSteps =
+			Number.isFinite(maxSteps) && maxSteps > 0
+				? Math.max(1, Math.floor(maxSteps))
+				: DEFAULT_MAX_STEPS;
+		const safeOffsetSide = Number.isFinite(offsetSide) ? offsetSide : 0;
+		const safeOffsetTop = Number.isFinite(offsetTop) ? offsetTop : 0;
+
+		const angleRad = (safeAngleDeg * Math.PI) / 180;
 		const shotDir = normalize({ x: Math.cos(angleRad), y: Math.sin(angleRad) });
 
-		cue.velocity = scale(shotDir, power * this.tuning.impulseScale);
+		cue.velocity = scale(shotDir, safePower * this.tuning.impulseScale);
 		cue.sideSpin =
-			this.normalizeTipOffset(offsetSide) * this.tuning.sideSpinStrength;
+			this.normalizeTipOffset(safeOffsetSide) * this.tuning.sideSpinStrength;
 		cue.topSpin =
-			this.normalizeTipOffset(offsetTop) * this.tuning.topSpinStrength;
+			this.normalizeTipOffset(safeOffsetTop) * this.tuning.topSpinStrength;
 
 		const trajectories: Record<string, Point[]> = {};
 		const events: PhysicsEvent[] = [];
-		const seenContacts = new Set<string>();
+		const activeContacts: ContactState = new Set();
 		const travelDistanceByBall: Record<string, number> = {};
 		const lastPositions: Record<string, Vec2> = {};
 
@@ -174,12 +215,12 @@ export class Simulation2D {
 
 		let stepCount = 0;
 		let stopped = false;
-		for (let step = 1; step <= maxSteps; step++) {
+		for (let step = 1; step <= safeMaxSteps; step++) {
 			const moving = this.stepSimulation(
 				step,
 				trajectories,
 				events,
-				seenContacts,
+				activeContacts,
 				travelDistanceByBall,
 				lastPositions,
 				shotDir,
@@ -196,6 +237,7 @@ export class Simulation2D {
 		this.appendFinalWaypoints(trajectories);
 		const trajectoryDistanceByBall =
 			this.calculateTrajectoryDistanceByBall(trajectories);
+		const finalPositions = this.getCurrentBallPositions();
 
 		this.restoreState(saved);
 
@@ -219,6 +261,7 @@ export class Simulation2D {
 				firstCushionSide: firstCueCushionHit?.cushionSide,
 				travelDistanceByBall,
 				trajectoryDistanceByBall,
+				finalPositions,
 			},
 		};
 	}
@@ -227,14 +270,16 @@ export class Simulation2D {
 		step: number,
 		trajectories: Record<string, Point[]>,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 		travelDistanceByBall: Record<string, number>,
 		lastPositions: Record<string, Vec2>,
 		shotDir: Vec2,
 	): boolean {
 		// 먼저 모든 공을 이동시키고, 이동 중 쿠션 충돌은 연속 충돌 방식으로 처리
+		this.releaseInactiveContacts(activeContacts);
+
 		for (const ball of this.balls.values()) {
-			this.advanceBall(ball, this.tuning.dt, step, events, seenContacts);
+			this.advanceBall(ball, this.tuning.dt, step, events, activeContacts);
 		}
 
 		// 공-공 충돌은 이전 위치와 현재 위치 사이를 훑어서 검사
@@ -243,10 +288,12 @@ export class Simulation2D {
 			step,
 			trajectories,
 			events,
-			seenContacts,
+			activeContacts,
 			shotDir,
 			lastPositions,
 		);
+
+		this.settleStoppedBalls();
 
 		for (const [id, ball] of this.balls) {
 			const lastPosition = lastPositions[id] ?? ball.position;
@@ -302,12 +349,22 @@ export class Simulation2D {
 		return distances;
 	}
 
+	private getCurrentBallPositions(): Record<string, Point> {
+		const positions: Record<string, Point> = {};
+
+		for (const [id, ball] of this.balls) {
+			positions[id] = { ...ball.position };
+		}
+
+		return positions;
+	}
+
 	private advanceBall(
 		ball: BallState,
 		duration: number,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 	): void {
 		let remainingTime = duration;
 		let collisionCount = 0;
@@ -316,18 +373,19 @@ export class Simulation2D {
 		// 한 프레임 안에서도 쿠션에 맞고 다시 움직일 수 있습니다.
 		// 충돌 시점까지의 시간만 먼저 사용하고, 반사 후 남은 시간만큼 계속 진행합니다.
 		while (remainingTime > 1e-6 && collisionCount <= maxCollisionsPerStep) {
-			const eventCountBefore = events.length;
-			const usedTime = this.advanceBallSegment(
+			const result = this.advanceBallSegment(
 				ball,
 				remainingTime,
 				step,
 				events,
-				seenContacts,
+				activeContacts,
 			);
-			this.decaySpin(ball, usedTime);
-			remainingTime -= usedTime;
+			this.decaySpin(ball, result.usedTime);
+			remainingTime -= result.usedTime;
 
-			if (events.length === eventCountBefore || !this.isBallMoving(ball)) {
+			// 이벤트 중복 제거와 실제 충돌 발생 여부를 분리합니다.
+			// 같은 쿠션을 다시 맞아 이벤트가 기록되지 않아도 남은 시간 이동은 계속 처리되어야 합니다.
+			if (!result.collided || !this.isBallMoving(ball)) {
 				break;
 			}
 			collisionCount++;
@@ -343,13 +401,13 @@ export class Simulation2D {
 		timeLeft: number,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
-	): number {
+		activeContacts: ContactState,
+	): BallAdvanceResult {
 		const speed = length(ball.velocity);
-		if (speed <= 0) return timeLeft;
+		if (speed <= 0) return { usedTime: timeLeft, collided: false };
 
 		const direction = scale(ball.velocity, 1 / speed);
-		const deceleration = this.tuning.rollingFriction * GRAVITY;
+		const deceleration = this.rollingDecelerationFor(ball);
 		const maxTravel = this.travelDistance(speed, deceleration, timeLeft);
 		const impact = this.findNextCushionImpact(ball, direction, maxTravel);
 
@@ -361,7 +419,7 @@ export class Simulation2D {
 			};
 			const nextSpeed = this.speedAfter(speed, deceleration, timeLeft);
 			ball.velocity = nextSpeed > 0 ? scale(direction, nextSpeed) : { x: 0, y: 0 };
-			return timeLeft;
+			return { usedTime: timeLeft, collided: false };
 		}
 
 		// 이 구간 안에 쿠션 충돌이 있으면 정확한 접촉 지점까지 이동
@@ -375,8 +433,11 @@ export class Simulation2D {
 			direction,
 			this.speedAfter(speed, deceleration, impactTime),
 		);
-		this.reflectCushion(ball, impact.side, step, events, seenContacts);
-		return Math.max(0, Math.min(timeLeft, impactTime));
+		this.reflectCushion(ball, impact.side, step, events, activeContacts);
+		return {
+			usedTime: Math.max(0, Math.min(timeLeft, impactTime)),
+			collided: true,
+		};
 	}
 
 	private findNextCushionImpact(
@@ -432,13 +493,13 @@ export class Simulation2D {
 		side: CushionSide,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 	): void {
 		if (side === "left" || side === "right") {
-			this.reflectVerticalCushion(ball, side, step, events, seenContacts);
+			this.reflectVerticalCushion(ball, side, step, events, activeContacts);
 			return;
 		}
-		this.reflectHorizontalCushion(ball, side, step, events, seenContacts);
+		this.reflectHorizontalCushion(ball, side, step, events, activeContacts);
 	}
 
 	private travelDistance(
@@ -465,6 +526,21 @@ export class Simulation2D {
 		return Math.max(0, speed - deceleration * duration);
 	}
 
+	private rollingDecelerationFor(ball: BallState): number {
+		const baseDeceleration = this.tuning.rollingFriction * GRAVITY;
+		if (Math.abs(ball.topSpin) <= this.tuning.spinStopSpeed) {
+			return baseDeceleration;
+		}
+
+		const spinEffect = clamp(
+			ball.topSpin * this.tuning.followDrawMotionTransfer,
+			-0.75,
+			0.5,
+		);
+		const decelerationFactor = clamp(1 - spinEffect, 0.5, 1.75);
+		return baseDeceleration * decelerationFactor;
+	}
+
 	private timeForTravel(
 		speed: number,
 		deceleration: number,
@@ -488,11 +564,7 @@ export class Simulation2D {
 	}
 
 	private isBallMoving(ball: BallState): boolean {
-		return (
-			length(ball.velocity) > this.tuning.stopSpeed ||
-			Math.abs(ball.sideSpin) > this.tuning.spinStopSpeed ||
-			Math.abs(ball.topSpin) > this.tuning.spinStopSpeed
-		);
+		return length(ball.velocity) > this.tuning.stopSpeed;
 	}
 
 	private reflectVerticalCushion(
@@ -500,20 +572,29 @@ export class Simulation2D {
 		side: CushionSide,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 	): void {
-		if ((side === "left" && ball.velocity.x >= 0) || (side === "right" && ball.velocity.x <= 0)) {
+		if (
+			(side === "left" && ball.velocity.x >= 0) ||
+			(side === "right" && ball.velocity.x <= 0)
+		) {
 			return;
 		}
 
+		const normalSpeed = Math.abs(ball.velocity.x);
+		const tangentSpeed = Math.abs(ball.velocity.y);
 		ball.velocity.x = -ball.velocity.x * this.tuning.cushionRestitution;
 		// 좌우 스핀은 쿠션 충돌 후 접선 방향 속도에만 영향을 줌
 		// 스핀이 없으면 접선 방향 속도는 의도적으로 그대로 둠
 		if (Math.abs(ball.sideSpin) > this.tuning.spinStopSpeed) {
-			ball.velocity.y +=
-				ball.sideSpin * this.tuning.cushionSpinTransfer * Math.abs(ball.velocity.x);
+			ball.velocity.y += this.cushionSpinCorrection(
+				ball.sideSpin,
+				normalSpeed,
+				tangentSpeed,
+			);
+			this.consumeCushionSpin(ball);
 		}
-		this.recordCushionEvent(ball, side, step, events, seenContacts);
+		this.recordCushionEvent(ball, side, step, events, activeContacts);
 	}
 
 	private reflectHorizontalCushion(
@@ -521,27 +602,64 @@ export class Simulation2D {
 		side: CushionSide,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 	): void {
-		if ((side === "top" && ball.velocity.y >= 0) || (side === "bottom" && ball.velocity.y <= 0)) {
+		if (
+			(side === "top" && ball.velocity.y >= 0) ||
+			(side === "bottom" && ball.velocity.y <= 0)
+		) {
 			return;
 		}
 
+		const normalSpeed = Math.abs(ball.velocity.y);
+		const tangentSpeed = Math.abs(ball.velocity.x);
 		ball.velocity.y = -ball.velocity.y * this.tuning.cushionRestitution;
 		// 좌우 스핀은 쿠션 충돌 후 접선 방향 속도에만 영향을 줌
 		// 스핀이 없으면 접선 방향 속도는 의도적으로 그대로 둠
 		if (Math.abs(ball.sideSpin) > this.tuning.spinStopSpeed) {
-			ball.velocity.x +=
-				ball.sideSpin * this.tuning.cushionSpinTransfer * Math.abs(ball.velocity.y);
+			ball.velocity.x += this.cushionSpinCorrection(
+				ball.sideSpin,
+				normalSpeed,
+				tangentSpeed,
+			);
+			this.consumeCushionSpin(ball);
 		}
-		this.recordCushionEvent(ball, side, step, events, seenContacts);
+		this.recordCushionEvent(ball, side, step, events, activeContacts);
+	}
+
+	private cushionSpinCorrection(
+		sideSpin: number,
+		normalSpeed: number,
+		tangentSpeed: number,
+	): number {
+		if (normalSpeed <= this.tuning.stopSpeed) return 0;
+
+		const incidenceFactor = normalSpeed / (normalSpeed + tangentSpeed + 1e-6);
+		const speedFactor = clamp(1.25 - normalSpeed / 4, 0.45, 1);
+		const rawCorrection =
+			sideSpin *
+			this.tuning.cushionSpinTransfer *
+			normalSpeed *
+			(0.4 + incidenceFactor * 0.6) *
+			speedFactor;
+		const maxCorrection =
+			normalSpeed * this.tuning.maxCushionSpinCorrectionRatio;
+
+		return clamp(rawCorrection, -maxCorrection, maxCorrection);
+	}
+
+	private consumeCushionSpin(ball: BallState): void {
+		ball.sideSpin *= this.tuning.cushionSpinRetention;
+		if (Math.abs(ball.sideSpin) <= this.tuning.spinStopSpeed) {
+			ball.sideSpin = 0;
+		}
 	}
 
 	private resolveBallCollisions(
 		step: number,
 		trajectories: Record<string, Point[]>,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 		shotDir: Vec2,
 		lastPositions: Record<string, Vec2>,
 	): void {
@@ -587,6 +705,9 @@ export class Simulation2D {
 				const relVel = sub(b.velocity, a.velocity);
 				const normalSpeed = dot(relVel, normal);
 				if (normalSpeed > 0) continue;
+				const impactSpeed = -normalSpeed;
+				const incomingVelocityA = { ...a.velocity };
+				const incomingVelocityB = { ...b.velocity };
 				this.appendWaypointIfMoved(trajectories, a.id, a.position, 0);
 				this.appendWaypointIfMoved(trajectories, b.id, b.position, 0);
 
@@ -602,19 +723,44 @@ export class Simulation2D {
 					y: b.velocity.y + impulse * normal.y,
 				};
 
-				this.applyCueSpinAfterBallCollision(a, b, normal, tangent, shotDir);
+				this.applyCutThrowToObjectBall(
+					a,
+					b,
+					normal,
+					tangent,
+					incomingVelocityA,
+					impactSpeed,
+				);
+				this.applyCutThrowToObjectBall(
+					b,
+					a,
+					scale(normal, -1),
+					scale(tangent, -1),
+					incomingVelocityB,
+					impactSpeed,
+				);
+
+				this.applyCueSpinAfterBallCollision(
+					a,
+					b,
+					normal,
+					tangent,
+					shotDir,
+					impactSpeed,
+				);
 				this.applyCueSpinAfterBallCollision(
 					b,
 					a,
 					scale(normal, -1),
 					scale(tangent, -1),
 					shotDir,
+					impactSpeed,
 				);
 
-				this.recordBallCollisionEvent(a, b, step, events, seenContacts);
+				this.recordBallCollisionEvent(a, b, step, events, activeContacts);
 				if (remainingTime > 1e-6) {
-					this.advanceBall(a, remainingTime, step, events, seenContacts);
-					this.advanceBall(b, remainingTime, step, events, seenContacts);
+					this.advanceBall(a, remainingTime, step, events, activeContacts);
+					this.advanceBall(b, remainingTime, step, events, activeContacts);
 				}
 			}
 		}
@@ -681,55 +827,182 @@ export class Simulation2D {
 		};
 	}
 
+	private applyCutThrowToObjectBall(
+		candidateCue: BallState,
+		objectBall: BallState,
+		_normalFromCueToObject: Vec2,
+		tangent: Vec2,
+		incomingVelocity: Vec2,
+		impactSpeed: number,
+	): void {
+		if (candidateCue.id !== "cue" || objectBall.id === "cue") return;
+
+		const incomingSpeed = length(incomingVelocity);
+		if (
+			incomingSpeed <= this.tuning.stopSpeed ||
+			impactSpeed <= this.tuning.stopSpeed
+		) {
+			return;
+		}
+
+		const incomingDirection = scale(incomingVelocity, 1 / incomingSpeed);
+		const cutAmount = dot(incomingDirection, tangent);
+		if (Math.abs(cutAmount) <= 1e-4) return;
+
+		const speedFactor = clamp(1.4 - impactSpeed / 3, 0.35, 1);
+		const sideSpinFactor =
+			Math.abs(candidateCue.sideSpin) > this.tuning.spinStopSpeed
+				? candidateCue.sideSpin * 0.15
+				: 0;
+		const rawThrowSpeed =
+			(cutAmount + sideSpinFactor) *
+			this.tuning.cutThrowTransfer *
+			impactSpeed *
+			speedFactor;
+		const throwSpeed = this.clampSpinCorrection(
+			rawThrowSpeed,
+			this.tuning.maxSpinCorrectionSpeed * 0.35,
+		);
+
+		objectBall.velocity = {
+			x: objectBall.velocity.x + tangent.x * throwSpeed,
+			y: objectBall.velocity.y + tangent.y * throwSpeed,
+		};
+	}
+
 	private applyCueSpinAfterBallCollision(
 		candidateCue: BallState,
-		other: BallState,
+		_other: BallState,
 		normalFromCueToOther: Vec2,
 		tangent: Vec2,
 		shotDir: Vec2,
+		impactSpeed: number,
 	): void {
 		if (candidateCue.id !== "cue") return;
+		let consumedSpin = false;
 
 		// 충돌 후 스핀 보정은 수구의 스핀에만 적용
 		// 목적구가 임의의 접선 운동을 다시 수구에 주지 않도록 제한
 		if (Math.abs(candidateCue.sideSpin) > this.tuning.spinStopSpeed) {
-			const tangentCorrection =
-				candidateCue.sideSpin * this.tuning.ballSpinTransfer;
+			const tangentCorrection = this.clampSpinCorrection(
+				candidateCue.sideSpin * this.tuning.ballSpinTransfer,
+				this.tuning.maxSpinCorrectionSpeed * 0.5,
+			);
 			candidateCue.velocity = {
 				x: candidateCue.velocity.x + tangent.x * tangentCorrection,
 				y: candidateCue.velocity.y + tangent.y * tangentCorrection,
 			};
-			other.velocity = {
-				x: other.velocity.x - tangent.x * tangentCorrection * 0.35,
-				y: other.velocity.y - tangent.y * tangentCorrection * 0.35,
-			};
+			consumedSpin = true;
 		}
 
-		if (Math.abs(candidateCue.topSpin) <= this.tuning.spinStopSpeed) return;
+		if (Math.abs(candidateCue.topSpin) <= this.tuning.spinStopSpeed) {
+			if (consumedSpin) this.consumeBallCollisionSpin(candidateCue);
+			return;
+		}
 
 		// 상/하 스핀은 가벼운 근사 모델
 		// 상단 스핀은 수구를 충돌선 방향으로 더 밀고, 하단 스핀은 끌어오는 효과를 줌
 		// 실제 테이블 데이터가 생기면 이 값을 보정 가능
-		const alongShot = dot(normalFromCueToOther, shotDir) >= 0 ? 1 : -1;
-		const correction =
-			candidateCue.topSpin * this.tuning.followDrawTransfer * alongShot;
+		const headOnFactor = Math.abs(dot(normalFromCueToOther, shotDir));
+		const spinSpeed =
+			Math.abs(candidateCue.topSpin) *
+			this.tuning.followDrawTransfer *
+			impactSpeed *
+			headOnFactor;
+		if (spinSpeed <= 0) {
+			if (consumedSpin) this.consumeBallCollisionSpin(candidateCue);
+			return;
+		}
+
+		const currentNormalVelocity = dot(
+			candidateCue.velocity,
+			normalFromCueToOther,
+		);
+		const targetNormalVelocity =
+			candidateCue.topSpin > 0
+				? Math.min(spinSpeed, this.tuning.maxSpinCorrectionSpeed)
+				: -Math.min(spinSpeed, this.tuning.maxSpinCorrectionSpeed);
+		const correction = this.clampSpinCorrection(
+			targetNormalVelocity - currentNormalVelocity,
+		);
 		candidateCue.velocity = {
 			x: candidateCue.velocity.x + normalFromCueToOther.x * correction,
 			y: candidateCue.velocity.y + normalFromCueToOther.y * correction,
 		};
-		other.velocity = {
-			x: other.velocity.x - normalFromCueToOther.x * correction * 0.35,
-			y: other.velocity.y - normalFromCueToOther.y * correction * 0.35,
-		};
+		this.consumeBallCollisionSpin(candidateCue);
+	}
+
+	private clampSpinCorrection(
+		value: number,
+		maxSpeed = this.tuning.maxSpinCorrectionSpeed,
+	): number {
+		return clamp(value, -maxSpeed, maxSpeed);
+	}
+
+	private consumeBallCollisionSpin(ball: BallState): void {
+		ball.sideSpin *= this.tuning.ballSpinRetention;
+		ball.topSpin *= this.tuning.ballSpinRetention;
+		if (Math.abs(ball.sideSpin) <= this.tuning.spinStopSpeed) {
+			ball.sideSpin = 0;
+		}
+		if (Math.abs(ball.topSpin) <= this.tuning.spinStopSpeed) {
+			ball.topSpin = 0;
+		}
+	}
+
+	private settleStoppedBalls(): void {
+		for (const ball of this.balls.values()) {
+			if (length(ball.velocity) > this.tuning.stopSpeed) continue;
+
+			ball.velocity = { x: 0, y: 0 };
+			// 제자리 회전은 이후 경로를 바꾸지 않으므로 예측 루프를 끝내기 위해 제거합니다.
+			ball.sideSpin = 0;
+			ball.topSpin = 0;
+		}
 	}
 
 	private isWorldMoving(): boolean {
 		for (const ball of this.balls.values()) {
 			if (length(ball.velocity) > this.tuning.stopSpeed) return true;
-			if (Math.abs(ball.sideSpin) > this.tuning.spinStopSpeed) return true;
-			if (Math.abs(ball.topSpin) > this.tuning.spinStopSpeed) return true;
 		}
 		return false;
+	}
+
+	private releaseInactiveContacts(activeContacts: ContactState): void {
+		for (const key of [...activeContacts]) {
+			const [type, first, second] = key.split(":");
+
+			if (type === "cushion") {
+				const ball = this.balls.get(first);
+				if (!ball || !this.isCushionContactActive(ball, second as CushionSide)) {
+					activeContacts.delete(key);
+				}
+				continue;
+			}
+
+			if (type === "ball") {
+				const a = this.balls.get(first);
+				const b = this.balls.get(second);
+				if (!a || !b || distance(a.position, b.position) > BALL_RADIUS_M * 2 + 1e-4) {
+					activeContacts.delete(key);
+				}
+			}
+		}
+	}
+
+	private isCushionContactActive(ball: BallState, side: CushionSide): boolean {
+		const contactTolerance = 1e-4;
+
+		switch (side) {
+			case "left":
+				return ball.position.x <= BALL_RADIUS_M + contactTolerance;
+			case "right":
+				return ball.position.x >= TABLE_WIDTH_M - BALL_RADIUS_M - contactTolerance;
+			case "top":
+				return ball.position.y <= BALL_RADIUS_M + contactTolerance;
+			case "bottom":
+				return ball.position.y >= TABLE_HEIGHT_M - BALL_RADIUS_M - contactTolerance;
+		}
 	}
 
 	private recordCushionEvent(
@@ -737,12 +1010,12 @@ export class Simulation2D {
 		side: CushionSide,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 	): void {
 		const key = `cushion:${ball.id}:${side}`;
-		if (seenContacts.has(key)) return;
-		seenContacts.add(key);
-			events.push({
+		if (activeContacts.has(key)) return;
+		activeContacts.add(key);
+		events.push({
 			type: "cushion-hit",
 			step,
 			position: { ...ball.position },
@@ -756,11 +1029,11 @@ export class Simulation2D {
 		b: BallState,
 		step: number,
 		events: PhysicsEvent[],
-		seenContacts: Set<string>,
+		activeContacts: ContactState,
 	): void {
 		const key = `ball:${[a.id, b.id].sort().join(":")}`;
-		if (seenContacts.has(key)) return;
-		seenContacts.add(key);
+		if (activeContacts.has(key)) return;
+		activeContacts.add(key);
 		const position = {
 			x: (a.position.x + b.position.x) / 2,
 			y: (a.position.y + b.position.y) / 2,
@@ -829,6 +1102,7 @@ export class Simulation2D {
 				stepCount: 0,
 				stopped: true,
 				travelDistanceByBall: {},
+				finalPositions: {},
 			},
 		};
 	}

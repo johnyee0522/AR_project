@@ -7,6 +7,7 @@
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+		"test:physics": "vite build --ssr scripts/physics_regression_test.ts --outDir .tmp/physics-test --emptyOutDir && node .tmp/physics-test/physics_regression_test.js",
 		"preview": "vite preview",
 		"predeploy": "npm run build",
 		"deploy": "gh-pages -d dist"

@@ -1,11 +1,29 @@
-// 앱 전체에서 쓰는 당구대 meter 좌표입니다.
-// x는 0~TABLE_WIDTH_M, y는 0~TABLE_HEIGHT_M 범위를 사용합니다.
+// 프로젝트 전체에서 쓰는 당구대 좌표는 meter 단위입니다.
+// 원점은 당구대 왼쪽 위, x는 오른쪽, y는 아래쪽으로 증가합니다.
 export interface Point {
 	x: number;
 	y: number;
 }
 
 export type MeterPoint = Point;
+
+export interface BallPositions {
+	[ballId: string]: MeterPoint;
+}
+
+export interface RequiredBallPositions extends BallPositions {
+	cue: MeterPoint;
+	red: MeterPoint;
+	yellow: MeterPoint;
+}
+
+export type {
+	DetectedBall,
+	DetectedCue,
+	DetectedHitPoint,
+	DetectedShot,
+	DetectedState,
+} from "./detection";
 
 export interface BallTrajectory {
 	ballId: string;
@@ -32,10 +50,20 @@ export interface PhysicsSummary {
 	firstCushionSide?: CushionSide;
 	travelDistanceByBall: Record<string, number>;
 	trajectoryDistanceByBall?: Record<string, number>;
+	finalPositions: Record<string, Point>;
 }
 
 export interface PhysicsResult {
 	trajectories: BallTrajectory[];
-	events?: PhysicsEvent[];
-	summary?: PhysicsSummary;
+	events: PhysicsEvent[];
+	summary: PhysicsSummary;
+}
+
+export interface PredictShotInput {
+	balls: BallPositions;
+	angle: number;
+	power: number;
+	maxSteps?: number;
+	sideSpin?: number;
+	topSpin?: number;
 }
