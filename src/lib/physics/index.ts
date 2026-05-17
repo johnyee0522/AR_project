@@ -1,5 +1,8 @@
-import type { PhysicsResult, PredictShotInput } from "@/types/physics";
+import type { DetectedState } from "@/types/detection";
+import type { PhysicsResult } from "@/types/physics";
 
+import { toPredictShotInput } from "./detection_adapter";
+import type { FinalBallPositions, PredictShotInput } from "./public_types";
 import { Simulation2D, type Simulation2DTuning } from "./simulation_2d";
 
 export {
@@ -7,8 +10,16 @@ export {
 	SIMULATION_2D_TUNING_VERSION,
 } from "./simulation_2d";
 export { Simulation2D, type Simulation2DTuning };
-export { detectedStateToPredictShotInput } from "./detection_adapter";
-export type { PredictShotInput } from "@/types/physics";
+export {
+	detectedStateToPredictShotInput,
+	toPredictShotInput,
+} from "./detection_adapter";
+export type { FinalBallPositions, PredictShotInput } from "./public_types";
+export {
+	drawPhysicsResultImage,
+	getImage,
+	type PhysicsResultImageOptions,
+} from "./result_image";
 export {
 	POWER_LEVELS,
 	calculateRollingFrictionForTravel,
@@ -23,6 +34,44 @@ export {
 	type PowerValueTravelEstimate,
 } from "./power_calibration";
 
+export type PhysicsResultInput = PredictShotInput | DetectedState;
+
+export interface GetPhysicsResultOptions {
+	tuning?: Partial<Simulation2DTuning>;
+	maxSteps?: number;
+}
+
+function isDetectedState(input: PhysicsResultInput): input is DetectedState {
+	return Array.isArray(input.balls);
+}
+
+export function getPhysicsResult(
+	input: PhysicsResultInput,
+	options: GetPhysicsResultOptions = {},
+): PhysicsResult {
+	if (isDetectedState(input)) {
+		return predictDetectedState(input, options);
+	}
+
+	return predictShot(
+		{
+			...input,
+			maxSteps: options.maxSteps ?? input.maxSteps,
+		},
+		options.tuning,
+	);
+}
+
+export function predictDetectedState(
+	detected: DetectedState,
+	options: GetPhysicsResultOptions = {},
+): PhysicsResult {
+	return predictShot(
+		toPredictShotInput(detected, options.maxSteps),
+		options.tuning,
+	);
+}
+
 export function predictShot(
 	input: PredictShotInput,
 	tuning: Partial<Simulation2DTuning> = {},
@@ -30,7 +79,7 @@ export function predictShot(
 	const simulation = new Simulation2D(tuning);
 	simulation.updateBallPositionsMeters(input.balls);
 	return simulation.predict(
-		input.angle,
+		input.angleDeg,
 		input.power,
 		input.maxSteps,
 		input.sideSpin ?? 0,
@@ -41,6 +90,13 @@ export function predictShot(
 export function predictFinalPositions(
 	input: PredictShotInput,
 	tuning: Partial<Simulation2DTuning> = {},
-): PhysicsResult["summary"]["finalPositions"] {
-	return predictShot(input, tuning).summary.finalPositions;
+): FinalBallPositions {
+	return getFinalPositions(predictShot(input, tuning));
+}
+
+export function getFinalPositions(result: PhysicsResult): FinalBallPositions {
+	const summary = result.summary as
+		| { finalPositions?: FinalBallPositions }
+		| undefined;
+	return summary?.finalPositions ?? {};
 }

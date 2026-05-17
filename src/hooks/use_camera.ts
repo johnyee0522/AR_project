@@ -1,22 +1,17 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import createFrameCapture from "@/lib/capture";
+import {
+	createDevDetectedState,
+	type DevDetectedStateInput,
+} from "@/lib/detection/dev_detected_state";
 import logger from "@/lib/logger";
 import type { DetectedState } from "@/types/detection";
-import type { Point } from "@/types/physics";
 
 interface UseCameraOptions {
 	videoCanvasRef: RefObject<HTMLCanvasElement | null>;
 	onFrame: (detected: DetectedState | null) => void;
-	testProps: {
-		cue: Point;
-		obj1: Point;
-		obj2: Point;
-		angle: number;
-		power: number;
-		sideSpin: number;
-		topSpin: number;
-	};
+	devInput: DevDetectedStateInput;
 }
 
 interface UseCameraReturn {
@@ -27,7 +22,7 @@ interface UseCameraReturn {
 function useCamera({
 	videoCanvasRef,
 	onFrame,
-	testProps,
+	devInput,
 }: UseCameraOptions): UseCameraReturn {
 	const [cameraReady, setCameraReady] = useState(false);
 	const [errorMsg, setErrorMsg] = useState("");
@@ -37,10 +32,10 @@ function useCamera({
 		onFrameRef.current = onFrame;
 	}, [onFrame]);
 
-	const testPropsRef = useRef(testProps);
+	const devInputRef = useRef(devInput);
 	useEffect(() => {
-		testPropsRef.current = testProps;
-	}, [testProps]);
+		devInputRef.current = devInput;
+	}, [devInput]);
 
 	const createFrameDrawer = useCallback(
 		(canvas: HTMLCanvasElement, width: number, height: number) => {
@@ -70,24 +65,7 @@ function useCamera({
 
 				const loop = () => {
 					if (ac.signal.aborted) return;
-					onFrameRef.current({
-						cue: {
-							angleDeg: testPropsRef.current.angle,
-							power: testPropsRef.current.power,
-							hitPoint: {
-								x: testPropsRef.current.sideSpin / 100,
-								y: testPropsRef.current.topSpin / 100,
-							},
-						},
-						shot: {
-							cueBallId: "cue",
-						},
-						balls: [
-							{ id: "cue", ...testPropsRef.current.cue },
-							{ id: "red", ...testPropsRef.current.obj1 },
-							{ id: "yellow", ...testPropsRef.current.obj2 },
-						],
-					});
+					onFrameRef.current(createDevDetectedState(devInputRef.current));
 					rAFId = requestAnimationFrame(loop);
 				};
 				rAFId = requestAnimationFrame(loop);
@@ -127,8 +105,9 @@ function useCamera({
 					});
 					drawer.draw(buffer);
 
-					// YOLO/ONNXRuntime 팀이 연결할 지점입니다.
-					// 프레임을 homography로 보정한 뒤 meter 좌표의 DetectedState를 넘기면 됩니다.
+					// TODO: Connect the production detector here.
+					// Convert YOLO/ONNXRuntime output through homography into a
+					// meter-space DetectedState, then pass it to onFrameRef.current().
 					onFrameRef.current(null);
 				});
 			} catch (err) {

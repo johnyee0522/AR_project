@@ -4,25 +4,23 @@ import {
 	estimatePowerValueTravel,
 } from "@/lib/physics";
 import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "@/lib/physics/physics_constants";
+import type { BallPositions, MeterPoint } from "@/types/physics";
 import styles from "./main.module.css";
 
-interface BallPos {
-	x: number;
-	y: number;
+interface BallControl {
+	id: string;
+	label: string;
 }
 
 interface TestPanelProps {
-	cue: BallPos;
-	obj1: BallPos;
-	obj2: BallPos;
+	balls: BallPositions;
+	ballControls: readonly BallControl[];
 	angle: number;
 	power: number;
 	sideSpin: number;
 	topSpin: number;
 	cueTravelMeters: number;
-	onCueChange: (pos: BallPos) => void;
-	onObj1Change: (pos: BallPos) => void;
-	onObj2Change: (pos: BallPos) => void;
+	onBallChange: (ballId: string, pos: MeterPoint) => void;
 	onAngleChange: (angle: number) => void;
 	onPowerChange: (power: number) => void;
 	onSideSpinChange: (sideSpin: number) => void;
@@ -38,6 +36,7 @@ const POSITION_MIN_M = 0;
 const POSITION_STEP_M = 0.01;
 const ANGLE_MIN = 0;
 const ANGLE_MAX = 360;
+const FALLBACK_BALL_POSITION: MeterPoint = { x: 0, y: 0 };
 
 function clampValue(value: number, min: number, max: number) {
 	if (!Number.isFinite(value)) return min;
@@ -45,17 +44,14 @@ function clampValue(value: number, min: number, max: number) {
 }
 
 const TestPanel: React.FC<TestPanelProps> = ({
-	cue,
-	obj1,
-	obj2,
+	balls,
+	ballControls,
 	angle,
 	power,
 	sideSpin,
 	topSpin,
 	cueTravelMeters,
-	onCueChange,
-	onObj1Change,
-	onObj2Change,
+	onBallChange,
 	onAngleChange,
 	onPowerChange,
 	onSideSpinChange,
@@ -162,16 +158,34 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	};
 
 	const updateBallCoordinate = (
-		ball: BallPos,
-		axis: keyof BallPos,
+		ballId: string,
+		ball: MeterPoint,
+		axis: keyof MeterPoint,
 		value: number,
-		onChange: (pos: BallPos) => void,
 	) => {
 		const max = axis === "x" ? TABLE_WIDTH_M : TABLE_HEIGHT_M;
-		onChange({
+		onBallChange(ballId, {
 			...ball,
 			[axis]: Number(clampValue(value, POSITION_MIN_M, max).toFixed(2)),
 		});
+	};
+
+	const renderBallCoordinateControls = ({ id, label }: BallControl) => {
+		const ball = balls[id] ?? FALLBACK_BALL_POSITION;
+
+		return (
+			<div key={id} className={styles.testGroup}>
+				<label>{`${label} X: ${ball.x.toFixed(2)}m / Y: ${ball.y.toFixed(2)}m`}</label>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={ball.x} onChange={(e) => updateBallCoordinate(id, ball, "x", Number(e.target.value))} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={ball.x.toFixed(2)} onChange={(e) => updateBallCoordinate(id, ball, "x", Number(e.target.value))} />
+				</div>
+				<div className={styles.sliderInputRow}>
+					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={ball.y} onChange={(e) => updateBallCoordinate(id, ball, "y", Number(e.target.value))} />
+					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={ball.y.toFixed(2)} onChange={(e) => updateBallCoordinate(id, ball, "y", Number(e.target.value))} />
+				</div>
+			</div>
+		);
 	};
 
 	const resetSpin = () => {
@@ -211,41 +225,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 				</button>
 			</div>
 
-			<div className={styles.testGroup}>
-				<label>{`\uc218\uad6c X: ${cue.x.toFixed(2)}m / Y: ${cue.y.toFixed(2)}m`}</label>
-				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={cue.x} onChange={(e) => updateBallCoordinate(cue, "x", Number(e.target.value), onCueChange)} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={cue.x.toFixed(2)} onChange={(e) => updateBallCoordinate(cue, "x", Number(e.target.value), onCueChange)} />
-				</div>
-				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={cue.y} onChange={(e) => updateBallCoordinate(cue, "y", Number(e.target.value), onCueChange)} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={cue.y.toFixed(2)} onChange={(e) => updateBallCoordinate(cue, "y", Number(e.target.value), onCueChange)} />
-				</div>
-			</div>
-
-			<div className={styles.testGroup}>
-				<label>{`\ubaa9\uc801\uad6c 1 X: ${obj1.x.toFixed(2)}m / Y: ${obj1.y.toFixed(2)}m`}</label>
-				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj1.x} onChange={(e) => updateBallCoordinate(obj1, "x", Number(e.target.value), onObj1Change)} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj1.x.toFixed(2)} onChange={(e) => updateBallCoordinate(obj1, "x", Number(e.target.value), onObj1Change)} />
-				</div>
-				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj1.y} onChange={(e) => updateBallCoordinate(obj1, "y", Number(e.target.value), onObj1Change)} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj1.y.toFixed(2)} onChange={(e) => updateBallCoordinate(obj1, "y", Number(e.target.value), onObj1Change)} />
-				</div>
-			</div>
-
-			<div className={styles.testGroup}>
-				<label>{`\ubaa9\uc801\uad6c 2 X: ${obj2.x.toFixed(2)}m / Y: ${obj2.y.toFixed(2)}m`}</label>
-				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj2.x} onChange={(e) => updateBallCoordinate(obj2, "x", Number(e.target.value), onObj2Change)} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={obj2.x.toFixed(2)} onChange={(e) => updateBallCoordinate(obj2, "x", Number(e.target.value), onObj2Change)} />
-				</div>
-				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj2.y} onChange={(e) => updateBallCoordinate(obj2, "y", Number(e.target.value), onObj2Change)} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={obj2.y.toFixed(2)} onChange={(e) => updateBallCoordinate(obj2, "y", Number(e.target.value), onObj2Change)} />
-				</div>
-			</div>
+			{ballControls.map(renderBallCoordinateControls)}
 
 			<div className={styles.testGroup}>
 				<label>{`\ud0c0\uaca9 \uac01\ub3c4: ${angle}\u00b0`}</label>

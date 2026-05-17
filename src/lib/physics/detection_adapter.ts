@@ -1,6 +1,12 @@
 import type { DetectedState } from "@/types/detection";
-import type { Point, PredictShotInput } from "@/types/physics";
+import type { BallPositions, MeterPoint, PredictShotInput } from "@/types/physics";
+import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "./physics_constants";
 
+const INTERNAL_CUE_BALL_ID = "cue";
+const COLLIDING_EXTERNAL_CUE_ID = "detected:cue";
+
+// Detected hitPoint is normalized to -1..1. The current physics engine expects
+// tip offset values in its legacy mm-like spin input scale.
 const HIT_POINT_TO_SPIN_MM = 100;
 const MIN_POWER = 0;
 const MAX_POWER = 3;
@@ -23,34 +29,74 @@ function normalizeAngleDeg(angleDeg: number): number {
 	return ((angleDeg % 360) + 360) % 360;
 }
 
+function normalizePower(power: number): number {
+	return clamp(power, MIN_POWER, MAX_POWER, 0);
+}
+
+function normalizeHitPointOffset(offset: number): number {
+	return clamp(offset, MIN_HIT_POINT, MAX_HIT_POINT, 0);
+}
+
 function normalizeMaxSteps(maxSteps: number): number {
 	if (!Number.isFinite(maxSteps) || maxSteps <= 0) return DEFAULT_MAX_STEPS;
 	return Math.max(1, Math.floor(maxSteps));
+}
+
+function isFinitePoint(point: MeterPoint): boolean {
+	return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
+function clampToTable(point: MeterPoint): MeterPoint {
+	return {
+		x: clamp(point.x, 0, TABLE_WIDTH_M, 0),
+		y: clamp(point.y, 0, TABLE_HEIGHT_M, 0),
+	};
+}
+
+function toInternalBallId(externalBallId: string, cueBallId: string): string {
+	if (externalBallId === cueBallId) return INTERNAL_CUE_BALL_ID;
+
+	// The physics engine reserves "cue" for the active cue ball. If another
+	// detected object ball uses that id, keep it in the record without letting it
+	// overwrite the real internal cue ball.
+	if (externalBallId === INTERNAL_CUE_BALL_ID) return COLLIDING_EXTERNAL_CUE_ID;
+
+	return externalBallId;
+}
+
+function detectedBallsToBallPositions(detected: DetectedState): BallPositions {
+	const balls: BallPositions = {};
+
+	for (const ball of detected.balls) {
+		const point = { x: ball.x, y: ball.y };
+		if (!isFinitePoint(point)) continue;
+
+		const ballId = toInternalBallId(ball.id, detected.shot.cueBallId);
+		balls[ballId] = clampToTable(point);
+	}
+
+	return balls;
+}
+
+export function toPredictShotInput(
+	detected: DetectedState,
+	maxSteps = DEFAULT_MAX_STEPS,
+): PredictShotInput {
+	return {
+		balls: detectedBallsToBallPositions(detected),
+		angleDeg: normalizeAngleDeg(detected.cue.angleDeg),
+		power: normalizePower(detected.cue.power),
+		sideSpin:
+			normalizeHitPointOffset(detected.cue.hitPoint.x) * HIT_POINT_TO_SPIN_MM,
+		topSpin:
+			normalizeHitPointOffset(detected.cue.hitPoint.y) * HIT_POINT_TO_SPIN_MM,
+		maxSteps: normalizeMaxSteps(maxSteps),
+	};
 }
 
 export function detectedStateToPredictShotInput(
 	detected: DetectedState,
 	maxSteps = DEFAULT_MAX_STEPS,
 ): PredictShotInput {
-	const balls: Record<string, Point> = {};
-
-	for (const ball of detected.balls) {
-		if (!Number.isFinite(ball.x) || !Number.isFinite(ball.y)) continue;
-
-		const ballId = ball.id === detected.shot.cueBallId ? "cue" : ball.id;
-		balls[ballId] = { x: ball.x, y: ball.y };
-	}
-
-	return {
-		balls,
-		angle: normalizeAngleDeg(detected.cue.angleDeg),
-		power: clamp(detected.cue.power, MIN_POWER, MAX_POWER, 0),
-		sideSpin:
-			clamp(detected.cue.hitPoint.x, MIN_HIT_POINT, MAX_HIT_POINT, 0) *
-			HIT_POINT_TO_SPIN_MM,
-		topSpin:
-			clamp(detected.cue.hitPoint.y, MIN_HIT_POINT, MAX_HIT_POINT, 0) *
-			HIT_POINT_TO_SPIN_MM,
-		maxSteps: normalizeMaxSteps(maxSteps),
-	};
+	return toPredictShotInput(detected, maxSteps);
 }

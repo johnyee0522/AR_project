@@ -1,28 +1,65 @@
-import assert from "node:assert/strict";
 import {
 	Simulation2D,
 	detectedStateToPredictShotInput,
+	getFinalPositions,
+	getPhysicsResult,
+	predictDetectedState,
 	predictFinalPositions,
 	predictShot,
+	toPredictShotInput,
 } from "../src/lib/physics";
+import { createDevDetectedState } from "../src/lib/detection/dev_detected_state";
 import {
 	BALL_RADIUS_M,
 	TABLE_HEIGHT_M,
 	TABLE_WIDTH_M,
 } from "../src/lib/physics/physics_constants";
-import type { PhysicsEvent, PhysicsResult, Point } from "../src/types/physics";
+import type {
+	BallPositions,
+	PhysicsEvent,
+	PhysicsResult,
+	Point,
+} from "../src/types/physics";
 
 const EPSILON_M = 1e-6;
 
+interface TestAssert {
+	ok(value: unknown, message?: string): void;
+	equal<T>(actual: T, expected: T, message?: string): void;
+	deepEqual<T>(actual: T, expected: T, message?: string): void;
+}
+
+const assert: TestAssert = {
+	ok(value: unknown, message = "Assertion failed"): void {
+		if (!value) throw new Error(message);
+	},
+	equal<T>(actual: T, expected: T, message = "Values should be equal"): void {
+		if (actual !== expected) {
+			throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
+		}
+	},
+	deepEqual<T>(actual: T, expected: T, message = "Values should be deeply equal"): void {
+		if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+			throw new Error(
+				`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+			);
+		}
+	},
+};
+
 function getTrajectory(result: PhysicsResult, ballId: string): Point[] {
 	const trajectory = result.trajectories.find((item) => item.ballId === ballId);
-	assert.ok(trajectory, `${ballId} trajectory should exist`);
+	if (!trajectory) {
+		throw new Error(`${ballId} trajectory should exist`);
+	}
 	return trajectory.waypoints;
 }
 
 function lastWaypoint(result: PhysicsResult, ballId: string): Point {
 	const waypoints = getTrajectory(result, ballId);
-	assert.ok(waypoints.length > 0, `${ballId} should have waypoints`);
+	if (waypoints.length === 0) {
+		throw new Error(`${ballId} should have waypoints`);
+	}
 	return waypoints.at(-1) as Point;
 }
 
@@ -31,9 +68,20 @@ function firstEvent(
 	type: PhysicsEvent["type"],
 	ballId: string,
 ): PhysicsEvent | undefined {
-	return result.events.find(
+	return getEvents(result).find(
 		(event) => event.type === type && event.ballId === ballId,
 	);
+}
+
+function getEvents(result: PhysicsResult): PhysicsEvent[] {
+	return result.events ?? [];
+}
+
+function getSummary(result: PhysicsResult): NonNullable<PhysicsResult["summary"]> {
+	if (!result.summary) {
+		throw new Error("Physics result summary should exist");
+	}
+	return result.summary;
 }
 
 function assertAlmostEqual(
@@ -64,12 +112,12 @@ function assertAlmostEqual(
 		"No-spin straight shot should not change y",
 	);
 	assert.equal(
-		result.events.length,
+		getEvents(result).length,
 		0,
 		"Short shot with no collision should not emit events",
 	);
 	assertAlmostEqual(
-		result.summary.finalPositions["cue"]?.y ?? Number.NaN,
+		getFinalPositions(result)["cue"]?.y ?? Number.NaN,
 		TABLE_HEIGHT_M / 2,
 		EPSILON_M,
 		"finalPositions should include final cue y",
@@ -86,7 +134,7 @@ function assertAlmostEqual(
 	const cueEnd = lastWaypoint(result, "cue");
 
 	assert.equal(
-		result.summary.stepCount,
+		getSummary(result).stepCount,
 		1,
 		"Stationary spin should be settled immediately",
 	);
@@ -119,7 +167,7 @@ function assertAlmostEqual(
 	);
 	const cueEnd = lastWaypoint(result, "cue");
 
-	assert.ok(result.summary.stopped, "Invalid prediction input should stop safely");
+	assert.ok(getSummary(result).stopped, "Invalid prediction input should stop safely");
 	assertAlmostEqual(
 		cueEnd.x,
 		0.6,
@@ -141,7 +189,7 @@ function assertAlmostEqual(
 			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 		});
 		const result = sim.predict(0, 0.8, 2400, 0, topSpin);
-		return result.summary.travelDistanceByBall["cue"] ?? 0;
+		return getSummary(result).travelDistanceByBall["cue"] ?? 0;
 	};
 
 	const drawTravel = makeTravel(-100);
@@ -241,7 +289,11 @@ function assertAlmostEqual(
 
 {
 	const makeCueEnd = (maxSpinCorrectionSpeed: number): Point => {
-		const sim = new Simulation2D({ maxSpinCorrectionSpeed });
+		const tuning = {
+			followDrawTransfer: 0.28,
+			maxSpinCorrectionSpeed,
+		};
+		const sim = new Simulation2D(tuning);
 		sim.updateBallPositionsMeters({
 			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
@@ -260,7 +312,11 @@ function assertAlmostEqual(
 
 {
 	const makeRedEnd = (cutThrowTransfer: number): Point => {
-		const sim = new Simulation2D({ cutThrowTransfer });
+		const tuning = {
+			ballRestitution: 0.95,
+			cutThrowTransfer,
+		};
+		const sim = new Simulation2D(tuning);
 		sim.updateBallPositionsMeters({
 			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 + BALL_RADIUS_M },
@@ -301,15 +357,33 @@ function assertAlmostEqual(
 			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		},
-		angle: 0,
+		angleDeg: 0,
 		power: 1,
 		maxSteps: 900,
 	});
 
 	assert.equal(
-		result.summary.firstHitBallId,
+		getSummary(result).firstHitBallId,
 		"red",
 		"predictShot should accept one-shot physics input",
+	);
+}
+
+{
+	const result = getPhysicsResult({
+		balls: {
+			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
+		},
+		angleDeg: 0,
+		power: 1,
+		maxSteps: 900,
+	});
+
+	assert.equal(
+		getSummary(result).firstHitBallId,
+		"red",
+		"getPhysicsResult should accept direct physics input",
 	);
 }
 
@@ -319,15 +393,41 @@ function assertAlmostEqual(
 			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		},
-		angle: 0,
+		angleDeg: 0,
 		power: 1,
 		maxSteps: 900,
 	});
 
 	assert.ok(
-		finalPositions.red.x > 1.15,
+		(finalPositions.red?.x ?? Number.NEGATIVE_INFINITY) > 1.15,
 		"predictFinalPositions should expose final ball positions directly",
 	);
+}
+
+{
+	const balls: BallPositions = {
+		cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
+		yellow: { x: 1.7, y: TABLE_HEIGHT_M / 2 },
+	};
+	const detected = createDevDetectedState({
+		balls,
+		angle: 35,
+		power: 1.2,
+		sideSpin: 50,
+		topSpin: -25,
+		cueBallId: "cue",
+	});
+
+	assert.equal(detected.cue.angleDeg, 35);
+	assert.equal(detected.cue.power, 1.2);
+	assert.deepEqual(detected.cue.hitPoint, { x: 0.5, y: -0.25 });
+	assert.equal(detected.shot.cueBallId, "cue");
+	assert.deepEqual(detected.balls, [
+		{ id: "cue", x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		{ id: "red", x: 1.15, y: TABLE_HEIGHT_M / 2 },
+		{ id: "yellow", x: 1.7, y: TABLE_HEIGHT_M / 2 },
+	]);
 }
 
 {
@@ -353,6 +453,142 @@ function assertAlmostEqual(
 }
 
 {
+	const input = toPredictShotInput({
+		cue: {
+			angleDeg: 15,
+			power: 1,
+			hitPoint: { x: 0, y: 0 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [
+			{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			{ id: "cue", x: 1.0, y: TABLE_HEIGHT_M / 2 },
+			{ id: "red", x: 1.4, y: TABLE_HEIGHT_M / 2 },
+		],
+	});
+
+	assert.deepEqual(
+		input.balls["cue"],
+		{ x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		"cueBallId should map the active cue ball to internal cue id",
+	);
+	assert.equal(input.balls["white"], undefined);
+	assert.deepEqual(
+		input.balls["detected:cue"],
+		{ x: 1.0, y: TABLE_HEIGHT_M / 2 },
+		"non-cue detected ball with cue id should avoid internal cue collision",
+	);
+	assert.deepEqual(input.balls["red"], { x: 1.4, y: TABLE_HEIGHT_M / 2 });
+}
+
+{
+	const input = toPredictShotInput({
+		cue: {
+			angleDeg: 0,
+			power: Number.POSITIVE_INFINITY,
+			hitPoint: { x: 2, y: -2 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [
+			{ id: "white", x: -1, y: TABLE_HEIGHT_M + 1 },
+			{ id: "red", x: Number.NaN, y: 0.5 },
+			{ id: "yellow", x: 0.5, y: Number.POSITIVE_INFINITY },
+			{ id: "blue", x: TABLE_WIDTH_M + 1, y: -1 },
+		],
+	});
+
+	assert.equal(input.power, 0);
+	assert.equal(input.sideSpin, 100);
+	assert.equal(input.topSpin, -100);
+	assert.deepEqual(input.balls["cue"], { x: 0, y: TABLE_HEIGHT_M });
+	assert.equal(input.balls["red"], undefined);
+	assert.equal(input.balls["yellow"], undefined);
+	assert.deepEqual(input.balls["blue"], { x: TABLE_WIDTH_M, y: 0 });
+}
+
+{
+	const negativePowerInput = toPredictShotInput({
+		cue: {
+			angleDeg: 0,
+			power: -1,
+			hitPoint: { x: 0, y: 0 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 }],
+	});
+	const highPowerInput = toPredictShotInput({
+		cue: {
+			angleDeg: 0,
+			power: 4,
+			hitPoint: { x: 0, y: 0 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 }],
+	});
+
+	assert.equal(negativePowerInput.power, 0);
+	assert.equal(highPowerInput.power, 3);
+}
+
+{
+	const result = getPhysicsResult({
+		cue: {
+			angleDeg: 0,
+			power: 1,
+			hitPoint: { x: 0, y: 0 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [
+			{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			{ id: "red", x: 1.15, y: TABLE_HEIGHT_M / 2 },
+		],
+	});
+
+	assert.equal(
+		getSummary(result).firstHitBallId,
+		"red",
+		"getPhysicsResult should accept DetectedState input",
+	);
+}
+
+{
+	const result = predictDetectedState({
+		cue: {
+			angleDeg: 0,
+			power: 1,
+			hitPoint: { x: 0, y: 0 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [
+			{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			{ id: "red", x: 1.15, y: TABLE_HEIGHT_M / 2 },
+		],
+	});
+
+	assert.equal(
+		getSummary(result).firstHitBallId,
+		"red",
+		"predictDetectedState should run DetectedState through the public prediction path",
+	);
+	assert.ok(
+		!!getSummary(result).finalPositions.cue,
+		"predictDetectedState should return final cue position",
+	);
+}
+
+{
 	const input = detectedStateToPredictShotInput(
 		{
 			cue: {
@@ -368,7 +604,7 @@ function assertAlmostEqual(
 		Number.NaN,
 	);
 
-	assert.equal(input.angle, 350);
+	assert.equal(input.angleDeg, 350);
 	assert.equal(input.power, 0);
 	assert.equal(input.sideSpin, 0);
 	assert.equal(input.topSpin, 0);

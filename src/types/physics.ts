@@ -1,5 +1,6 @@
-// 프로젝트 전체에서 쓰는 당구대 좌표는 meter 단위입니다.
-// 원점은 당구대 왼쪽 위, x는 오른쪽, y는 아래쪽으로 증가합니다.
+// Project-wide billiards table coordinates use meter units.
+// Origin is the table's top-left corner. x grows right, y grows down.
+// Standard table size is 2.84m x 1.42m.
 export interface Point {
 	x: number;
 	y: number;
@@ -7,15 +8,23 @@ export interface Point {
 
 export type MeterPoint = Point;
 
-export interface BallPositions {
-	[ballId: string]: MeterPoint;
-}
+export type BallPositions = Record<string, MeterPoint>;
 
-export interface RequiredBallPositions extends BallPositions {
+/**
+ * @deprecated Use BallPositions for integration code. This fixed 3-ball shape is
+ * only kept as a legacy helper while older callers are migrated.
+ */
+export type LegacyRequiredBallPositions = BallPositions & {
 	cue: MeterPoint;
 	red: MeterPoint;
 	yellow: MeterPoint;
-}
+};
+
+/**
+ * @deprecated Use LegacyRequiredBallPositions only for older 3-ball-only code,
+ * and prefer BallPositions for new multi-ball integrations.
+ */
+export type RequiredBallPositions = LegacyRequiredBallPositions;
 
 export type {
 	DetectedBall,
@@ -27,7 +36,7 @@ export type {
 
 export interface BallTrajectory {
 	ballId: string;
-	waypoints: Point[];
+	waypoints: MeterPoint[];
 }
 
 export type PhysicsEventType = "ball-collision" | "cushion-hit";
@@ -37,11 +46,13 @@ export type CushionSide = "top" | "bottom" | "left" | "right";
 export interface PhysicsEvent {
 	type: PhysicsEventType;
 	step: number;
-	position: Point;
+	position: MeterPoint;
 	ballId: string;
 	otherBallId?: string;
 	cushionSide?: CushionSide;
 }
+
+export type FinalBallPositions = Record<string, MeterPoint>;
 
 export interface PhysicsSummary {
 	stepCount: number;
@@ -50,7 +61,7 @@ export interface PhysicsSummary {
 	firstCushionSide?: CushionSide;
 	travelDistanceByBall: Record<string, number>;
 	trajectoryDistanceByBall?: Record<string, number>;
-	finalPositions: Record<string, Point>;
+	finalPositions: FinalBallPositions;
 }
 
 export interface PhysicsResult {
@@ -61,7 +72,8 @@ export interface PhysicsResult {
 
 export interface PredictShotInput {
 	balls: BallPositions;
-	angle: number;
+	/** Shot angle in degrees. 0=right, 90=down, 180=left, 270=up. */
+	angleDeg: number;
 	power: number;
 	maxSteps?: number;
 	sideSpin?: number;
