@@ -1,4 +1,5 @@
 import type {
+	BallTrajectory,
 	CushionSide,
 	PhysicsEvent,
 	PhysicsResult,
@@ -25,6 +26,7 @@ import {
 const MIN_POWER = 0;
 const MAX_POWER = 3;
 const DEFAULT_MAX_STEPS = 2400;
+const INTERNAL_CUE_BALL_ID = "cueBall";
 
 export interface Simulation2DTuning {
 	impulseScale: number;
@@ -173,7 +175,7 @@ export class Simulation2D {
 		offsetSide = 0,
 		offsetTop = 0,
 	): PhysicsResult {
-		const cue = this.balls.get("cue");
+		const cue = this.balls.get(INTERNAL_CUE_BALL_ID);
 		if (!cue) return this.emptyResult();
 
 		// 예측 중에는 속도를 위해 월드 상태를 직접 변경
@@ -242,28 +244,32 @@ export class Simulation2D {
 		this.restoreState(saved);
 
 		const firstCueBallHit = events.find(
-			(event) => event.type === "ball-collision" && event.ballId === "cue",
+			(event) =>
+				event.type === "ball-collision" &&
+				event.ballId === INTERNAL_CUE_BALL_ID,
 		);
 		const firstCueCushionHit = events.find(
-			(event) => event.type === "cushion-hit" && event.ballId === "cue",
+			(event) =>
+				event.type === "cushion-hit" &&
+				event.ballId === INTERNAL_CUE_BALL_ID,
 		);
 
-		return {
-			trajectories: Object.entries(trajectories).map(([ballId, waypoints]) => ({
+		const trajectoryList = Object.entries(trajectories).map(
+			([ballId, waypoints]) => ({
 				ballId,
 				waypoints,
-			})),
-			events,
-			summary: {
-				stepCount,
-				stopped,
-				firstHitBallId: firstCueBallHit?.otherBallId,
-				firstCushionSide: firstCueCushionHit?.cushionSide,
-				travelDistanceByBall,
-				trajectoryDistanceByBall,
-				finalPositions,
-			},
+			}),
+		);
+		const summary = {
+			stepCount,
+			stopped,
+			firstHitBallId: firstCueBallHit?.otherBallId,
+			firstCushionSide: firstCueCushionHit?.cushionSide,
+			travelDistanceByBall,
+			trajectoryDistanceByBall,
+			finalPositions,
 		};
+		return this.toPublicResult(trajectoryList, events, summary);
 	}
 
 	private stepSimulation(
@@ -835,7 +841,12 @@ export class Simulation2D {
 		incomingVelocity: Vec2,
 		impactSpeed: number,
 	): void {
-		if (candidateCue.id !== "cue" || objectBall.id === "cue") return;
+		if (
+			candidateCue.id !== INTERNAL_CUE_BALL_ID ||
+			objectBall.id === INTERNAL_CUE_BALL_ID
+		) {
+			return;
+		}
 
 		const incomingSpeed = length(incomingVelocity);
 		if (
@@ -878,7 +889,7 @@ export class Simulation2D {
 		shotDir: Vec2,
 		impactSpeed: number,
 	): void {
-		if (candidateCue.id !== "cue") return;
+		if (candidateCue.id !== INTERNAL_CUE_BALL_ID) return;
 		let consumedSpin = false;
 
 		// 충돌 후 스핀 보정은 수구의 스핀에만 적용
@@ -1095,16 +1106,55 @@ export class Simulation2D {
 	}
 
 	private emptyResult(): PhysicsResult {
-		return {
-			trajectories: [],
-			events: [],
-			summary: {
+		return this.toPublicResult(
+			[],
+			[],
+			{
 				stepCount: 0,
 				stopped: true,
 				travelDistanceByBall: {},
 				finalPositions: {},
 			},
+		);
+	}
+
+	private toPublicResult(
+		trajectories: BallTrajectory[],
+		events: PhysicsEvent[],
+		summary: PhysicsResult["summary"],
+	): PhysicsResult {
+		const result: PhysicsResult = {
+			balls: this.getBallResults(trajectories, summary.finalPositions),
+			collisions: events.map((event) => ({
+				type: event.type,
+				position: event.position,
+				ballId: event.ballId,
+				otherBallId: event.otherBallId,
+				cushionSide: event.cushionSide,
+			})),
+			trajectories,
+			events,
+			summary,
 		};
+		return result;
+	}
+
+	private getBallResults(
+		trajectories: BallTrajectory[],
+		finalPositions: Record<string, Point>,
+	): PhysicsResult["balls"] {
+		const balls: PhysicsResult["balls"] = {};
+
+		for (const trajectory of trajectories) {
+			const start = trajectory.waypoints[0];
+			if (!start) continue;
+			balls[trajectory.ballId] = {
+				start,
+				end: finalPositions[trajectory.ballId] ?? start,
+			};
+		}
+
+		return balls;
 	}
 
 	private clampToTable(position: Vec2): Vec2 {

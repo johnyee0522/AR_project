@@ -2,8 +2,8 @@ import type { DetectedState } from "@/types/detection";
 import type { BallPositions, MeterPoint, PredictShotInput } from "@/types/physics";
 import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "./physics_constants";
 
-const INTERNAL_CUE_BALL_ID = "cue";
-const COLLIDING_EXTERNAL_CUE_ID = "detected:cue";
+const INTERNAL_CUE_BALL_ID = "cueBall";
+const COLLIDING_EXTERNAL_CUE_BALL_ID = "detected:cueBall";
 
 // Detected hitPoint is normalized to -1..1. The current physics engine expects
 // tip offset values in its legacy mm-like spin input scale.
@@ -56,10 +56,12 @@ function clampToTable(point: MeterPoint): MeterPoint {
 function toInternalBallId(externalBallId: string, cueBallId: string): string {
 	if (externalBallId === cueBallId) return INTERNAL_CUE_BALL_ID;
 
-	// The physics engine reserves "cue" for the active cue ball. If another
+	// The physics engine reserves "cueBall" for the active cue ball. If another
 	// detected object ball uses that id, keep it in the record without letting it
 	// overwrite the real internal cue ball.
-	if (externalBallId === INTERNAL_CUE_BALL_ID) return COLLIDING_EXTERNAL_CUE_ID;
+	if (externalBallId === INTERNAL_CUE_BALL_ID) {
+		return COLLIDING_EXTERNAL_CUE_BALL_ID;
+	}
 
 	return externalBallId;
 }
@@ -75,6 +77,11 @@ function detectedBallsToBallPositions(detected: DetectedState): BallPositions {
 		balls[ballId] = clampToTable(point);
 	}
 
+	// If shot.cueBallId is missing from detected.balls, no internal "cueBall" ball
+	// is created. Keep that non-throwing behavior for DEV/compatibility paths; the
+	// simulation will return an empty result when it cannot find the cue ball.
+	// Production detector integration should treat this as a detection miss and
+	// skip prediction or log a warning before calling the physics API.
 	return balls;
 }
 

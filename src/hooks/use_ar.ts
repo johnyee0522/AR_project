@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import logger from "@/lib/logger";
-import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "@/lib/physics/physics_constants";
+import {
+	BALL_RADIUS_M,
+	TABLE_HEIGHT_M,
+	TABLE_WIDTH_M,
+} from "@/lib/physics/physics_constants";
 import type { PhysicsResult, Point } from "@/types/physics";
 
 interface UseAROptions {
@@ -30,7 +34,7 @@ interface TableViewport {
 }
 
 const BALL_COLORS: Record<string, string> = {
-	cue: "#ffffff",
+	cueBall: "#ffffff",
 	red: "#ff4757",
 	yellow: "#ffd700",
 };
@@ -148,7 +152,7 @@ function useAR({
 					mCtx,
 					minimapWaypoints[0],
 					color,
-					Math.max(2.5, minimapViewport.pixelsPerMeter * 0.028575),
+					Math.max(2.5, minimapViewport.pixelsPerMeter * BALL_RADIUS_M),
 					false,
 				);
 			}

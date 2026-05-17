@@ -3,19 +3,19 @@ import type { BallPositions } from "@/types/physics";
 
 export interface DevDetectedStateInput {
 	balls: BallPositions;
-	angle: number;
+	angleDeg: number;
 	power: number;
 	sideSpin: number;
 	topSpin: number;
 	cueBallId?: string;
 }
 
-const DEFAULT_CUE_BALL_ID = "cue";
+const DEFAULT_CUE_BALL_ID = "cueBall";
 const SPIN_MM_TO_HIT_POINT = 1 / 100;
 
 export function createDevDetectedState({
 	balls,
-	angle,
+	angleDeg,
 	power,
 	sideSpin,
 	topSpin,
@@ -23,7 +23,7 @@ export function createDevDetectedState({
 }: DevDetectedStateInput): DetectedState {
 	return {
 		cue: {
-			angleDeg: angle,
+			angleDeg,
 			power,
 			hitPoint: {
 				x: sideSpin * SPIN_MM_TO_HIT_POINT,

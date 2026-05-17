@@ -14,7 +14,13 @@ export {
 	detectedStateToPredictShotInput,
 	toPredictShotInput,
 } from "./detection_adapter";
-export type { FinalBallPositions, PredictShotInput } from "./public_types";
+export type {
+	FinalBallPositions,
+	PhysicsBallResult,
+	PhysicsBallResults,
+	PhysicsCollision,
+	PredictShotInput,
+} from "./public_types";
 export {
 	drawPhysicsResultImage,
 	getImage,

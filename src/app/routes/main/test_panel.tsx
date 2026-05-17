@@ -15,13 +15,13 @@ interface BallControl {
 interface TestPanelProps {
 	balls: BallPositions;
 	ballControls: readonly BallControl[];
-	angle: number;
+	angleDeg: number;
 	power: number;
 	sideSpin: number;
 	topSpin: number;
 	cueTravelMeters: number;
 	onBallChange: (ballId: string, pos: MeterPoint) => void;
-	onAngleChange: (angle: number) => void;
+	onAngleDegChange: (angleDeg: number) => void;
 	onPowerChange: (power: number) => void;
 	onSideSpinChange: (sideSpin: number) => void;
 	onTopSpinChange: (topSpin: number) => void;
@@ -46,13 +46,13 @@ function clampValue(value: number, min: number, max: number) {
 const TestPanel: React.FC<TestPanelProps> = ({
 	balls,
 	ballControls,
-	angle,
+	angleDeg,
 	power,
 	sideSpin,
 	topSpin,
 	cueTravelMeters,
 	onBallChange,
-	onAngleChange,
+	onAngleDegChange,
 	onPowerChange,
 	onSideSpinChange,
 	onTopSpinChange,
@@ -154,7 +154,7 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	};
 
 	const updateAngle = (value: number) => {
-		onAngleChange(Math.round(clampValue(value, ANGLE_MIN, ANGLE_MAX)));
+		onAngleDegChange(Math.round(clampValue(value, ANGLE_MIN, ANGLE_MAX)));
 	};
 
 	const updateBallCoordinate = (
@@ -228,10 +228,10 @@ const TestPanel: React.FC<TestPanelProps> = ({
 			{ballControls.map(renderBallCoordinateControls)}
 
 			<div className={styles.testGroup}>
-				<label>{`\ud0c0\uaca9 \uac01\ub3c4: ${angle}\u00b0`}</label>
+				<label>{`\ud0c0\uaca9 \uac01\ub3c4: ${angleDeg}\u00b0`}</label>
 				<div className={styles.sliderInputRow}>
-					<input type="range" min={ANGLE_MIN} max={ANGLE_MAX} value={angle} onChange={(e) => updateAngle(Number(e.target.value))} />
-					<input className={styles.compactNumberInput} type="number" min={ANGLE_MIN} max={ANGLE_MAX} step="1" value={angle} onChange={(e) => updateAngle(Number(e.target.value))} />
+					<input type="range" min={ANGLE_MIN} max={ANGLE_MAX} value={angleDeg} onChange={(e) => updateAngle(Number(e.target.value))} />
+					<input className={styles.compactNumberInput} type="number" min={ANGLE_MIN} max={ANGLE_MAX} step="1" value={angleDeg} onChange={(e) => updateAngle(Number(e.target.value))} />
 				</div>
 			</div>
 

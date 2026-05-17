@@ -99,11 +99,11 @@ function assertAlmostEqual(
 {
 	const sim = new Simulation2D();
 	sim.updateBallPositionsMeters({
-		cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 	});
 
 	const result = sim.predict(0, 0.5, 120, 0, 0);
-	const cueEnd = lastWaypoint(result, "cue");
+	const cueEnd = lastWaypoint(result, "cueBall");
 
 	assertAlmostEqual(
 		cueEnd.y,
@@ -117,21 +117,21 @@ function assertAlmostEqual(
 		"Short shot with no collision should not emit events",
 	);
 	assertAlmostEqual(
-		getFinalPositions(result)["cue"]?.y ?? Number.NaN,
+		getFinalPositions(result)["cueBall"]?.y ?? Number.NaN,
 		TABLE_HEIGHT_M / 2,
 		EPSILON_M,
-		"finalPositions should include final cue y",
+		"finalPositions should include final cueBall y",
 	);
 }
 
 {
 	const sim = new Simulation2D();
 	sim.updateBallPositionsMeters({
-		cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 	});
 
 	const result = sim.predict(0, 0, 1200, 100, 100);
-	const cueEnd = lastWaypoint(result, "cue");
+	const cueEnd = lastWaypoint(result, "cueBall");
 
 	assert.equal(
 		getSummary(result).stepCount,
@@ -155,7 +155,7 @@ function assertAlmostEqual(
 {
 	const sim = new Simulation2D();
 	sim.updateBallPositionsMeters({
-		cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 	});
 
 	const result = sim.predict(
@@ -165,7 +165,7 @@ function assertAlmostEqual(
 		Number.NaN,
 		Number.NaN,
 	);
-	const cueEnd = lastWaypoint(result, "cue");
+	const cueEnd = lastWaypoint(result, "cueBall");
 
 	assert.ok(getSummary(result).stopped, "Invalid prediction input should stop safely");
 	assertAlmostEqual(
@@ -186,10 +186,10 @@ function assertAlmostEqual(
 	const makeTravel = (topSpin: number): number => {
 		const sim = new Simulation2D();
 		sim.updateBallPositionsMeters({
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 		});
 		const result = sim.predict(0, 0.8, 2400, 0, topSpin);
-		return getSummary(result).travelDistanceByBall["cue"] ?? 0;
+		return getSummary(result).travelDistanceByBall["cueBall"] ?? 0;
 	};
 
 	const drawTravel = makeTravel(-100);
@@ -209,12 +209,12 @@ function assertAlmostEqual(
 {
 	const sim = new Simulation2D();
 	sim.updateBallPositionsMeters({
-		cue: { x: TABLE_WIDTH_M - 0.45, y: TABLE_HEIGHT_M / 2 },
+		cueBall: { x: TABLE_WIDTH_M - 0.45, y: TABLE_HEIGHT_M / 2 },
 	});
 
 	const result = sim.predict(0, 1.4, 900, 0, 0);
-	const cueEnd = lastWaypoint(result, "cue");
-	const event = firstEvent(result, "cushion-hit", "cue");
+	const cueEnd = lastWaypoint(result, "cueBall");
+	const event = firstEvent(result, "cushion-hit", "cueBall");
 
 	assert.equal(event?.cushionSide, "right");
 	assertAlmostEqual(
@@ -228,12 +228,12 @@ function assertAlmostEqual(
 {
 	const sim = new Simulation2D();
 	sim.updateBallPositionsMeters({
-		cue: { x: TABLE_WIDTH_M / 2, y: TABLE_HEIGHT_M - 0.35 },
+		cueBall: { x: TABLE_WIDTH_M / 2, y: TABLE_HEIGHT_M - 0.35 },
 	});
 
 	const result = sim.predict(90, 1.1, 900, 0, 0);
-	const cueEnd = lastWaypoint(result, "cue");
-	const event = firstEvent(result, "cushion-hit", "cue");
+	const cueEnd = lastWaypoint(result, "cueBall");
+	const event = firstEvent(result, "cushion-hit", "cueBall");
 
 	assert.equal(event?.cushionSide, "bottom");
 	assertAlmostEqual(
@@ -247,12 +247,12 @@ function assertAlmostEqual(
 {
 	const sim = new Simulation2D();
 	sim.updateBallPositionsMeters({
-		cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 		red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 	});
 
 	const result = sim.predict(0, 1.0, 900, 0, 0);
-	const firstHit = firstEvent(result, "ball-collision", "cue");
+	const firstHit = firstEvent(result, "ball-collision", "cueBall");
 	const redEnd = lastWaypoint(result, "red");
 
 	assert.equal(firstHit?.otherBallId, "red");
@@ -272,14 +272,14 @@ function assertAlmostEqual(
 	const makeResult = (topSpin: number): PhysicsResult => {
 		const sim = new Simulation2D();
 		sim.updateBallPositionsMeters({
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		});
 		return sim.predict(0, 1.2, 1200, 0, topSpin);
 	};
 
-	const noSpinCueEnd = lastWaypoint(makeResult(0), "cue");
-	const drawCueEnd = lastWaypoint(makeResult(-100), "cue");
+	const noSpinCueEnd = lastWaypoint(makeResult(0), "cueBall");
+	const drawCueEnd = lastWaypoint(makeResult(-100), "cueBall");
 
 	assert.ok(
 		drawCueEnd.x < noSpinCueEnd.x - 0.05,
@@ -295,10 +295,10 @@ function assertAlmostEqual(
 		};
 		const sim = new Simulation2D(tuning);
 		sim.updateBallPositionsMeters({
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		});
-		return lastWaypoint(sim.predict(0, 1.5, 1200, 0, -120), "cue");
+		return lastWaypoint(sim.predict(0, 1.5, 1200, 0, -120), "cueBall");
 	};
 
 	const limitedDrawEnd = makeCueEnd(0.05);
@@ -318,7 +318,7 @@ function assertAlmostEqual(
 		};
 		const sim = new Simulation2D(tuning);
 		sim.updateBallPositionsMeters({
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 + BALL_RADIUS_M },
 		});
 		return lastWaypoint(sim.predict(0, 1.0, 900, 0, 0), "red");
@@ -337,13 +337,13 @@ function assertAlmostEqual(
 	const makeResult = (offsetSide: number): PhysicsResult => {
 		const sim = new Simulation2D();
 		sim.updateBallPositionsMeters({
-			cue: { x: TABLE_WIDTH_M - 0.5, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: TABLE_WIDTH_M - 0.5, y: TABLE_HEIGHT_M / 2 },
 		});
 		return sim.predict(0, 1.5, 900, offsetSide, 0);
 	};
 
-	const leftSpinEnd = lastWaypoint(makeResult(-60), "cue");
-	const rightSpinEnd = lastWaypoint(makeResult(60), "cue");
+	const leftSpinEnd = lastWaypoint(makeResult(-60), "cueBall");
+	const rightSpinEnd = lastWaypoint(makeResult(60), "cueBall");
 
 	assert.ok(
 		Math.abs(leftSpinEnd.y - rightSpinEnd.y) > 0.02,
@@ -354,7 +354,7 @@ function assertAlmostEqual(
 {
 	const result = predictShot({
 		balls: {
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		},
 		angleDeg: 0,
@@ -372,7 +372,7 @@ function assertAlmostEqual(
 {
 	const result = getPhysicsResult({
 		balls: {
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		},
 		angleDeg: 0,
@@ -385,12 +385,31 @@ function assertAlmostEqual(
 		"red",
 		"getPhysicsResult should accept direct physics input",
 	);
+	assert.deepEqual(
+		result.balls["cueBall"]?.start,
+		{ x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		"getPhysicsResult should expose cueBall start position",
+	);
+	assert.ok(
+		(result.balls["red"]?.end.x ?? Number.NEGATIVE_INFINITY) > 1.15,
+		"getPhysicsResult should expose object ball final position",
+	);
+	assert.equal(
+		result.collisions[0]?.type,
+		"ball-collision",
+		"getPhysicsResult should expose collision records",
+	);
+	assert.equal(
+		result.collisions[0]?.ballId,
+		"cueBall",
+		"collision records should use cueBall id",
+	);
 }
 
 {
 	const finalPositions = predictFinalPositions({
 		balls: {
-			cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+			cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 			red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		},
 		angleDeg: 0,
@@ -406,25 +425,25 @@ function assertAlmostEqual(
 
 {
 	const balls: BallPositions = {
-		cue: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		cueBall: { x: 0.6, y: TABLE_HEIGHT_M / 2 },
 		red: { x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		yellow: { x: 1.7, y: TABLE_HEIGHT_M / 2 },
 	};
 	const detected = createDevDetectedState({
 		balls,
-		angle: 35,
+		angleDeg: 35,
 		power: 1.2,
 		sideSpin: 50,
 		topSpin: -25,
-		cueBallId: "cue",
+		cueBallId: "cueBall",
 	});
 
 	assert.equal(detected.cue.angleDeg, 35);
 	assert.equal(detected.cue.power, 1.2);
 	assert.deepEqual(detected.cue.hitPoint, { x: 0.5, y: -0.25 });
-	assert.equal(detected.shot.cueBallId, "cue");
+	assert.equal(detected.shot.cueBallId, "cueBall");
 	assert.deepEqual(detected.balls, [
-		{ id: "cue", x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		{ id: "cueBall", x: 0.6, y: TABLE_HEIGHT_M / 2 },
 		{ id: "red", x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		{ id: "yellow", x: 1.7, y: TABLE_HEIGHT_M / 2 },
 	]);
@@ -446,7 +465,7 @@ function assertAlmostEqual(
 		],
 	});
 
-	assert.deepEqual(input.balls["cue"], { x: 0.6, y: TABLE_HEIGHT_M / 2 });
+	assert.deepEqual(input.balls["cueBall"], { x: 0.6, y: TABLE_HEIGHT_M / 2 });
 	assert.equal(input.balls["white"], undefined);
 	assert.equal(input.sideSpin, 50);
 	assert.equal(input.topSpin, -25);
@@ -464,23 +483,59 @@ function assertAlmostEqual(
 		},
 		balls: [
 			{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 },
-			{ id: "cue", x: 1.0, y: TABLE_HEIGHT_M / 2 },
+			{ id: "cueBall", x: 1.0, y: TABLE_HEIGHT_M / 2 },
 			{ id: "red", x: 1.4, y: TABLE_HEIGHT_M / 2 },
 		],
 	});
 
 	assert.deepEqual(
-		input.balls["cue"],
+		input.balls["cueBall"],
 		{ x: 0.6, y: TABLE_HEIGHT_M / 2 },
-		"cueBallId should map the active cue ball to internal cue id",
+		"cueBallId should map the active cue ball to internal cueBall id",
 	);
 	assert.equal(input.balls["white"], undefined);
 	assert.deepEqual(
-		input.balls["detected:cue"],
+		input.balls["detected:cueBall"],
 		{ x: 1.0, y: TABLE_HEIGHT_M / 2 },
-		"non-cue detected ball with cue id should avoid internal cue collision",
+		"non-cue detected ball with cueBall id should avoid internal cueBall collision",
 	);
 	assert.deepEqual(input.balls["red"], { x: 1.4, y: TABLE_HEIGHT_M / 2 });
+}
+
+{
+	const missingCueBallState = {
+		cue: {
+			angleDeg: 0,
+			power: 1,
+			hitPoint: { x: 0, y: 0 },
+		},
+		shot: {
+			cueBallId: "white",
+		},
+		balls: [
+			{ id: "red", x: 1.15, y: TABLE_HEIGHT_M / 2 },
+			{ id: "yellow", x: 1.7, y: TABLE_HEIGHT_M / 2 },
+		],
+	};
+	const input = toPredictShotInput(missingCueBallState);
+	const result = predictDetectedState(missingCueBallState);
+
+	assert.equal(
+		input.balls["cueBall"],
+		undefined,
+		"missing cueBallId should not synthesize an internal cue ball",
+	);
+	assert.deepEqual(input.balls["red"], { x: 1.15, y: TABLE_HEIGHT_M / 2 });
+	assert.equal(
+		getSummary(result).stepCount,
+		0,
+		"missing internal cue ball should return a safe empty result",
+	);
+	assert.deepEqual(
+		getSummary(result).finalPositions,
+		{},
+		"missing internal cue ball should not report final positions",
+	);
 }
 
 {
@@ -504,7 +559,7 @@ function assertAlmostEqual(
 	assert.equal(input.power, 0);
 	assert.equal(input.sideSpin, 100);
 	assert.equal(input.topSpin, -100);
-	assert.deepEqual(input.balls["cue"], { x: 0, y: TABLE_HEIGHT_M });
+	assert.deepEqual(input.balls["cueBall"], { x: 0, y: TABLE_HEIGHT_M });
 	assert.equal(input.balls["red"], undefined);
 	assert.equal(input.balls["yellow"], undefined);
 	assert.deepEqual(input.balls["blue"], { x: TABLE_WIDTH_M, y: 0 });
@@ -583,8 +638,8 @@ function assertAlmostEqual(
 		"predictDetectedState should run DetectedState through the public prediction path",
 	);
 	assert.ok(
-		!!getSummary(result).finalPositions.cue,
-		"predictDetectedState should return final cue position",
+		!!getSummary(result).finalPositions.cueBall,
+		"predictDetectedState should return final cueBall position",
 	);
 }
 

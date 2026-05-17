@@ -1,4 +1,8 @@
-import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "./physics_constants";
+import {
+	BALL_RADIUS_M,
+	TABLE_HEIGHT_M,
+	TABLE_WIDTH_M,
+} from "./physics_constants";
 import type { PhysicsResult, Point } from "@/types/physics";
 
 interface PixelPoint {
@@ -21,13 +25,16 @@ export interface PhysicsResultImageOptions {
 	mimeType?: "image/png" | "image/jpeg" | "image/webp";
 	quality?: number;
 	drawTableBounds?: boolean;
+	drawBallStarts?: boolean;
+	glow?: boolean;
+	lineWidth?: number;
 }
 
 const DEFAULT_IMAGE_WIDTH = 960;
 const DEFAULT_IMAGE_HEIGHT = 480;
 const DEFAULT_BACKGROUND = "rgba(0, 0, 0, 0)";
 const BALL_COLORS: Record<string, string> = {
-	cue: "#ffffff",
+	cueBall: "#ffffff",
 	red: "#ff4757",
 	yellow: "#ffd700",
 };
@@ -74,7 +81,7 @@ export function drawPhysicsResultImage(
 		ctx.fillRect(0, 0, width, height);
 	}
 
-	if (options.drawTableBounds ?? true) {
+	if (options.drawTableBounds ?? false) {
 		drawTableBounds(ctx, viewport);
 	}
 
@@ -85,15 +92,18 @@ export function drawPhysicsResultImage(
 		);
 
 		if (points.length >= 2) {
-			drawTrajectoryLine(ctx, points, color, viewport.pixelsPerMeter);
+			drawTrajectoryLine(ctx, points, color, viewport.pixelsPerMeter, {
+				glow: options.glow ?? true,
+				lineWidth: options.lineWidth ?? 2,
+			});
 		}
 
-		if (points.length > 0) {
+		if ((options.drawBallStarts ?? false) && points.length > 0) {
 			drawBallPoint(
 				ctx,
 				points[0],
 				color,
-				Math.max(4, viewport.pixelsPerMeter * 0.028575),
+				Math.max(4, viewport.pixelsPerMeter * BALL_RADIUS_M),
 			);
 		}
 	}
@@ -136,15 +146,21 @@ function drawTrajectoryLine(
 	points: PixelPoint[],
 	color: string,
 	pixelsPerMeter: number,
+	options: {
+		glow: boolean;
+		lineWidth: number;
+	},
 ): void {
 	const dashSize = Math.max(6, pixelsPerMeter * 0.035);
 
 	ctx.save();
 	ctx.strokeStyle = color;
-	ctx.lineWidth = 2;
+	ctx.lineWidth = options.lineWidth;
 	ctx.setLineDash([dashSize, dashSize]);
-	ctx.shadowBlur = 8;
-	ctx.shadowColor = color;
+	if (options.glow) {
+		ctx.shadowBlur = 10;
+		ctx.shadowColor = color;
+	}
 	ctx.beginPath();
 	ctx.moveTo(points[0].x, points[0].y);
 	for (let i = 1; i < points.length; i++) {

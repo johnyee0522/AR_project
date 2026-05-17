@@ -12,13 +12,13 @@ import TestPanel from "./test_panel";
 import styles from "./main.module.css";
 
 const DEFAULT_BALL_POSITIONS: BallPositions = {
-	cue: { x: 0.57, y: 1.07 },
+	cueBall: { x: 0.57, y: 1.07 },
 	red: { x: 1.42, y: 0.71 },
 	yellow: { x: 1.99, y: 0.43 },
 };
 
 const TEST_PANEL_BALLS = [
-	{ id: "cue", label: "\uc218\uad6c" },
+	{ id: "cueBall", label: "\uc218\uad6c" },
 	{ id: "red", label: "\ubaa9\uc801\uad6c 1" },
 	{ id: "yellow", label: "\ubaa9\uc801\uad6c 2" },
 ] as const;
@@ -35,7 +35,7 @@ function Main() {
 
 	const [gameState, setGameState] = useState({
 		balls: DEFAULT_BALL_POSITIONS,
-		angle: 45,
+		angleDeg: 45,
 		power: 0.5,
 		sideSpin: 0,
 		topSpin: 0,
@@ -56,7 +56,7 @@ function Main() {
 				? toPredictShotInput(detected)
 				: {
 						balls: gameState.balls,
-						angleDeg: gameState.angle,
+						angleDeg: gameState.angleDeg,
 						power: gameState.power,
 						sideSpin: gameState.sideSpin,
 						topSpin: gameState.topSpin,
@@ -84,7 +84,7 @@ function Main() {
 			}
 
 			const nextCueTravel =
-				physicsResult.summary?.travelDistanceByBall["cue"] ?? 0;
+				physicsResult.summary?.travelDistanceByBall["cueBall"] ?? 0;
 			setCueTravelMeters((prev) =>
 				Math.abs(prev - nextCueTravel) > 0.005 ? nextCueTravel : prev,
 			);
@@ -99,11 +99,11 @@ function Main() {
 		onFrame: handleFrame,
 		devInput: {
 			balls: gameState.balls,
-			angle: gameState.angle,
+			angleDeg: gameState.angleDeg,
 			power: gameState.power,
 			sideSpin: gameState.sideSpin,
 			topSpin: gameState.topSpin,
-			cueBallId: "cue",
+			cueBallId: "cueBall",
 		},
 	});
 
@@ -149,7 +149,7 @@ function Main() {
 				<TestPanel
 					balls={gameState.balls}
 					ballControls={TEST_PANEL_BALLS}
-					angle={gameState.angle}
+					angleDeg={gameState.angleDeg}
 					power={gameState.power}
 					sideSpin={gameState.sideSpin}
 					topSpin={gameState.topSpin}
@@ -160,8 +160,8 @@ function Main() {
 							balls: { ...prev.balls, [ballId]: pos },
 						}))
 					}
-					onAngleChange={(angle) =>
-						setGameState((prev) => ({ ...prev, angle }))
+					onAngleDegChange={(angleDeg) =>
+						setGameState((prev) => ({ ...prev, angleDeg }))
 					}
 					onPowerChange={(power) =>
 						setGameState((prev) => ({ ...prev, power }))

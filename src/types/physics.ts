@@ -15,7 +15,7 @@ export type BallPositions = Record<string, MeterPoint>;
  * only kept as a legacy helper while older callers are migrated.
  */
 export type LegacyRequiredBallPositions = BallPositions & {
-	cue: MeterPoint;
+	cueBall: MeterPoint;
 	red: MeterPoint;
 	yellow: MeterPoint;
 };
@@ -54,6 +54,17 @@ export interface PhysicsEvent {
 
 export type FinalBallPositions = Record<string, MeterPoint>;
 
+export interface PhysicsBallResult {
+	start: MeterPoint;
+	end: MeterPoint;
+}
+
+export type PhysicsBallResults = Record<string, PhysicsBallResult>;
+
+export type PhysicsCollision = Omit<PhysicsEvent, "step"> & {
+	step?: number;
+};
+
 export interface PhysicsSummary {
 	stepCount: number;
 	stopped: boolean;
@@ -65,7 +76,13 @@ export interface PhysicsSummary {
 }
 
 export interface PhysicsResult {
+	/** Public, human-readable ball result: start and final position by ball id. */
+	balls: PhysicsBallResults;
+	/** Public collision/cushion records. Use position for the event point. */
+	collisions: PhysicsCollision[];
+	/** Detailed trajectory points kept for getImage() and advanced rendering. */
 	trajectories: BallTrajectory[];
+	/** Detailed event records kept for debugging and compatibility. */
 	events: PhysicsEvent[];
 	summary: PhysicsSummary;
 }

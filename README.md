@@ -152,10 +152,12 @@ interface PredictShotInput {
 Rules:
 
 - `balls` is a `Record<string, MeterPoint>`.
-- The internal cue ball id is always `"cue"`.
-- `DetectedState.shot.cueBallId` is mapped to internal `"cue"` by `toPredictShotInput()`.
+- The internal cue ball id is always `"cueBall"`.
+- `DetectedState.shot.cueBallId` is mapped to internal `"cueBall"` by `toPredictShotInput()`.
+- If `shot.cueBallId` is not present in `balls[]`, the adapter does not synthesize an internal `"cueBall"` ball. The physics engine then returns a safe empty result because it cannot find a cue ball.
 - Other ball ids are preserved.
-- If a non-cue detected ball already uses id `"cue"`, the adapter maps it to `"detected:cue"` to avoid overwriting the internal cue ball.
+- If a non-cue detected ball already uses id `"cueBall"`, the adapter maps it to `"detected:cueBall"` to avoid overwriting the internal cue ball.
+- `DetectedState.cue` remains cue-stick information, not a ball id.
 - `angleDeg` is the shot angle in degrees.
 - `DetectedState.cue.angleDeg` is copied into `PredictShotInput.angleDeg` by the adapter.
 
@@ -182,7 +184,7 @@ Use this as the main physics call when input is already in internal physics form
 ```ts
 const result = predictShot({
   balls: {
-    cue: { x: 0.57, y: 1.07 },
+    cueBall: { x: 0.57, y: 1.07 },
     red: { x: 1.42, y: 0.71 },
   },
   angleDeg: 45,
@@ -208,6 +210,89 @@ Compatibility helper that accepts either `PredictShotInput` or `DetectedState`.
 
 New code should prefer `predictShot()` for physics input and `predictDetectedState()` for detection input. Keep `getPhysicsResult()` for compatibility or simple call sites.
 
+The public result is organized for integration code:
+
+```ts
+const result = getPhysicsResult(detectedState);
+
+result.balls.cueBall.start; // starting meter position
+result.balls.cueBall.end; // final meter position
+result.collisions; // ball-collision and cushion-hit points
+result.summary.firstHitBallId; // first object ball hit by cueBall
+```
+
+Example shape:
+
+```ts
+{
+  balls: {
+    cueBall: {
+      start: { x: 0.57, y: 1.07 },
+      end: { x: 1.1, y: 0.9 },
+    },
+    red: {
+      start: { x: 1.42, y: 0.71 },
+      end: { x: 1.8, y: 0.7 },
+    },
+  },
+  collisions: [
+    {
+      type: "ball-collision",
+      position: { x: 1.2, y: 0.8 },
+      ballId: "cueBall",
+      otherBallId: "red",
+    },
+    {
+      type: "cushion-hit",
+      position: { x: 2.81, y: 0.9 },
+      ballId: "red",
+      cushionSide: "right",
+    },
+  ],
+  summary: {
+    firstHitBallId: "red",
+    firstCushionSide: "right",
+    finalPositions: {
+      cueBall: { x: 1.1, y: 0.9 },
+      red: { x: 1.8, y: 0.7 },
+    },
+  },
+}
+```
+
+Detailed `trajectories` and `events` are still kept on the result for `getImage(result)` and advanced debugging, but most callers should use `balls`, `collisions`, and `summary`.
+
+### `getImage(result)`
+
+Creates a browser data URL image from the physics result. By default this image
+is the same kind of large AR overlay shown on the main screen: transparent
+background, glowing dashed trajectory lines only, no minimap border, and no ball
+start dots.
+
+```ts
+const result = getPhysicsResult(detectedState);
+const image = getImage(result, {
+  width: 2048,
+  height: 1024,
+});
+```
+
+Use the returned string directly in an image tag:
+
+```tsx
+<img src={image} alt="Expected trajectory" />
+```
+
+If a debug/minimap-style image is needed, turn the extras on explicitly:
+
+```ts
+const debugImage = getImage(result, {
+  drawTableBounds: true,
+  drawBallStarts: true,
+  background: "#101010",
+});
+```
+
 ### `predictFinalPositions(input)`
 
 Runs prediction and returns only final ball positions.
@@ -217,7 +302,7 @@ Use this when rendering trajectories/events is not needed.
 ```ts
 const finalPositions = predictFinalPositions({
   balls: {
-    cue: { x: 0.57, y: 1.07 },
+    cueBall: { x: 0.57, y: 1.07 },
     red: { x: 1.42, y: 0.71 },
   },
   angleDeg: 45,
@@ -234,11 +319,11 @@ It converts test-panel style values into the official `DetectedState` contract.
 ```ts
 const detected = createDevDetectedState({
   balls,
-  angle,
+  angleDeg,
   power,
   sideSpin,
   topSpin,
-  cueBallId: "cue",
+  cueBallId: "cueBall",
 });
 ```
 
@@ -250,6 +335,7 @@ This helper owns the DEV object creation that used to live directly inside `use_
 - Current AR rendering is not yet an exact camera-image homography projection.
 - Accurate overlay on the real camera image still needs a dedicated homography/projection layer.
 - Production YOLO/ONNXRuntime detector integration is TODO.
+- Production detector code should treat a missing `shot.cueBallId` ball as a detection miss: skip prediction for that frame or log a warning instead of relying on an empty physics result.
 - Masse and other complex 3D/spin-heavy shots are out of scope.
 - Jump shots and z-axis physics are out of scope.
 - Practical tuning should focus on measured values for `rollingFriction`, `cushionRestitution`, `ballRestitution`, and `impulseScale`.
