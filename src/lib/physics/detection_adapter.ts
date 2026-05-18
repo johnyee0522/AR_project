@@ -1,5 +1,9 @@
 import type { DetectedState } from "@/types/detection";
-import type { BallPositions, MeterPoint, PredictShotInput } from "@/types/physics";
+import type {
+	BallPositions,
+	MeterPoint,
+	PredictShotInput,
+} from "@/types/physics";
 import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "./physics_constants";
 
 const INTERNAL_CUE_BALL_ID = "cueBall";

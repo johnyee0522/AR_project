@@ -116,13 +116,14 @@ function useAR({
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			mCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
 
-			const showMainOverlay =
-				options.showMainOverlay ?? isARModeRef.current;
+			const showMainOverlay = options.showMainOverlay ?? isARModeRef.current;
 			const showMinimap = options.showMinimap ?? isARModeRef.current;
 			if (!result || (!showMainOverlay && !showMinimap)) return;
 
 			const arViewport = showMainOverlay ? getTableViewport(canvas) : null;
-			const minimapViewport = showMinimap ? getTableViewport(minimapCanvas) : null;
+			const minimapViewport = showMinimap
+				? getTableViewport(minimapCanvas)
+				: null;
 
 			if (minimapViewport) {
 				drawTableBounds(mCtx, minimapViewport);
@@ -131,7 +132,9 @@ function useAR({
 			for (const trajectory of result.trajectories) {
 				const color = getBallColor(trajectory.ballId);
 				const arWaypoints = arViewport
-					? trajectory.waypoints.map((point) => toCanvasPoint(point, arViewport))
+					? trajectory.waypoints.map((point) =>
+							toCanvasPoint(point, arViewport),
+						)
 					: [];
 				const minimapWaypoints = minimapViewport
 					? trajectory.waypoints.map((point) =>

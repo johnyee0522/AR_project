@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-	calibratePowerTravel,
-	estimatePowerValueTravel,
-} from "@/lib/physics";
+import { calibratePowerTravel, estimatePowerValueTravel } from "@/lib/physics";
 import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "@/lib/physics/physics_constants";
 import type { BallPositions, MeterPoint } from "@/types/physics";
 import styles from "./main.module.css";
@@ -63,8 +60,8 @@ const TestPanel: React.FC<TestPanelProps> = ({
 	const offset = useRef({ x: 0, y: 0 });
 	const panelRef = useRef<HTMLDivElement>(null);
 	const baselineTravel = estimatePowerValueTravel(power);
-	const [targetTravelMeters, setTargetTravelMeters] = useState(
-		() => Number(baselineTravel.travelMeters.toFixed(2)),
+	const [targetTravelMeters, setTargetTravelMeters] = useState(() =>
+		Number(baselineTravel.travelMeters.toFixed(2)),
 	);
 	const targetTravelForCalibration = Math.max(0.01, targetTravelMeters);
 	const calibration = calibratePowerTravel({
@@ -177,12 +174,50 @@ const TestPanel: React.FC<TestPanelProps> = ({
 			<div key={id} className={styles.testGroup}>
 				<label>{`${label} X: ${ball.x.toFixed(2)}m / Y: ${ball.y.toFixed(2)}m`}</label>
 				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={ball.x} onChange={(e) => updateBallCoordinate(id, ball, "x", Number(e.target.value))} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_WIDTH_M} step={POSITION_STEP_M} value={ball.x.toFixed(2)} onChange={(e) => updateBallCoordinate(id, ball, "x", Number(e.target.value))} />
+					<input
+						type="range"
+						min={POSITION_MIN_M}
+						max={TABLE_WIDTH_M}
+						step={POSITION_STEP_M}
+						value={ball.x}
+						onChange={(e) =>
+							updateBallCoordinate(id, ball, "x", Number(e.target.value))
+						}
+					/>
+					<input
+						className={styles.compactNumberInput}
+						type="number"
+						min={POSITION_MIN_M}
+						max={TABLE_WIDTH_M}
+						step={POSITION_STEP_M}
+						value={ball.x.toFixed(2)}
+						onChange={(e) =>
+							updateBallCoordinate(id, ball, "x", Number(e.target.value))
+						}
+					/>
 				</div>
 				<div className={styles.sliderInputRow}>
-					<input type="range" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={ball.y} onChange={(e) => updateBallCoordinate(id, ball, "y", Number(e.target.value))} />
-					<input className={styles.compactNumberInput} type="number" min={POSITION_MIN_M} max={TABLE_HEIGHT_M} step={POSITION_STEP_M} value={ball.y.toFixed(2)} onChange={(e) => updateBallCoordinate(id, ball, "y", Number(e.target.value))} />
+					<input
+						type="range"
+						min={POSITION_MIN_M}
+						max={TABLE_HEIGHT_M}
+						step={POSITION_STEP_M}
+						value={ball.y}
+						onChange={(e) =>
+							updateBallCoordinate(id, ball, "y", Number(e.target.value))
+						}
+					/>
+					<input
+						className={styles.compactNumberInput}
+						type="number"
+						min={POSITION_MIN_M}
+						max={TABLE_HEIGHT_M}
+						step={POSITION_STEP_M}
+						value={ball.y.toFixed(2)}
+						onChange={(e) =>
+							updateBallCoordinate(id, ball, "y", Number(e.target.value))
+						}
+					/>
 				</div>
 			</div>
 		);
@@ -230,8 +265,22 @@ const TestPanel: React.FC<TestPanelProps> = ({
 			<div className={styles.testGroup}>
 				<label>{`\ud0c0\uaca9 \uac01\ub3c4: ${angleDeg}\u00b0`}</label>
 				<div className={styles.sliderInputRow}>
-					<input type="range" min={ANGLE_MIN} max={ANGLE_MAX} value={angleDeg} onChange={(e) => updateAngle(Number(e.target.value))} />
-					<input className={styles.compactNumberInput} type="number" min={ANGLE_MIN} max={ANGLE_MAX} step="1" value={angleDeg} onChange={(e) => updateAngle(Number(e.target.value))} />
+					<input
+						type="range"
+						min={ANGLE_MIN}
+						max={ANGLE_MAX}
+						value={angleDeg}
+						onChange={(e) => updateAngle(Number(e.target.value))}
+					/>
+					<input
+						className={styles.compactNumberInput}
+						type="number"
+						min={ANGLE_MIN}
+						max={ANGLE_MAX}
+						step="1"
+						value={angleDeg}
+						onChange={(e) => updateAngle(Number(e.target.value))}
+					/>
 				</div>
 			</div>
 

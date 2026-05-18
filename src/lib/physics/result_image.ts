@@ -45,7 +45,10 @@ function getBallColor(ballId: string): string {
 }
 
 function getTableViewport(width: number, height: number): TableViewport {
-	const pixelsPerMeter = Math.min(width / TABLE_WIDTH_M, height / TABLE_HEIGHT_M);
+	const pixelsPerMeter = Math.min(
+		width / TABLE_WIDTH_M,
+		height / TABLE_HEIGHT_M,
+	);
 	const tableWidth = TABLE_WIDTH_M * pixelsPerMeter;
 	const tableHeight = TABLE_HEIGHT_M * pixelsPerMeter;
 

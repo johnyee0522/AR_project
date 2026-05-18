@@ -379,7 +379,10 @@
 	font-size: 12px;
 	font-weight: 700;
 	cursor: pointer;
-	transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+	transition:
+		background-color 0.2s ease,
+		color 0.2s ease,
+		box-shadow 0.2s ease;
 }
 
 .powerLevelButton.active {
@@ -400,8 +403,12 @@
 	aspect-ratio: 1;
 	border: none;
 	border-radius: 50%;
-	background:
-		radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.95), rgba(230, 238, 242, 0.9) 35%, rgba(165, 181, 190, 0.92) 100%);
+	background: radial-gradient(
+		circle at 38% 32%,
+		rgba(255, 255, 255, 0.95),
+		rgba(230, 238, 242, 0.9) 35%,
+		rgba(165, 181, 190, 0.92) 100%
+	);
 	box-shadow:
 		inset -10px -12px 18px rgba(0, 0, 0, 0.2),
 		inset 8px 8px 14px rgba(255, 255, 255, 0.65),

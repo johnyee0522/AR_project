@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type PointerEvent,
+} from "react";
 import ARButton from "@/components/ar_button/ar_button";
 import DevLog from "@/components/dev_log/dev_log";
 import Minimap from "@/components/minimap/minimap";
@@ -76,8 +82,7 @@ function Main() {
 	const shouldShowMinimap = inputSource === "simulator" || isARMode;
 	const shouldShowCameraShotControls =
 		inputSource === "camera" && isARMode && !isControlUiHidden;
-	const shouldShowARButton =
-		inputSource !== "camera" || !isControlUiHidden;
+	const shouldShowARButton = inputSource !== "camera" || !isControlUiHidden;
 	const shouldShowInputControls =
 		inputSource !== "camera" || !isControlUiHidden;
 	const shouldShowControlVisibilityButton = inputSource === "camera";
@@ -139,13 +144,7 @@ function Main() {
 				showMinimap: shouldShowMinimap,
 			});
 		},
-		[
-			drawAR,
-			shouldShowMainTrajectory,
-			shouldShowMinimap,
-			sim,
-			tuningVersion,
-		],
+		[drawAR, shouldShowMainTrajectory, shouldShowMinimap, sim, tuningVersion],
 	);
 
 	const handleARButtonClick = useCallback(() => {

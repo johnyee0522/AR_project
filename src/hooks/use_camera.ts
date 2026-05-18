@@ -40,8 +40,14 @@ function getCanvasFrameSize(canvas: HTMLCanvasElement): {
 	const devicePixelRatio = window.devicePixelRatio || 1;
 
 	return {
-		width: Math.max(1, Math.round((rect.width || window.innerWidth) * devicePixelRatio)),
-		height: Math.max(1, Math.round((rect.height || window.innerHeight) * devicePixelRatio)),
+		width: Math.max(
+			1,
+			Math.round((rect.width || window.innerWidth) * devicePixelRatio),
+		),
+		height: Math.max(
+			1,
+			Math.round((rect.height || window.innerHeight) * devicePixelRatio),
+		),
 	};
 }
 

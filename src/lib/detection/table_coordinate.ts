@@ -126,15 +126,20 @@ function createPixelToTableHomography(
 	];
 }
 
-function applyHomography(point: PixelPoint, homography: Homography): MeterPoint | null {
+function applyHomography(
+	point: PixelPoint,
+	homography: Homography,
+): MeterPoint | null {
 	const denominator =
 		homography[6] * point.x + homography[7] * point.y + homography[8];
 	if (Math.abs(denominator) < 1e-10) return null;
 
 	return {
-		x: (homography[0] * point.x + homography[1] * point.y + homography[2]) /
+		x:
+			(homography[0] * point.x + homography[1] * point.y + homography[2]) /
 			denominator,
-		y: (homography[3] * point.x + homography[4] * point.y + homography[5]) /
+		y:
+			(homography[3] * point.x + homography[4] * point.y + homography[5]) /
 			denominator,
 	};
 }
@@ -156,5 +161,7 @@ export function pixelToTableMeters(
 	corners: readonly PixelPoint[],
 	tableSize: TableSizeMeters = DEFAULT_TABLE_SIZE,
 ): MeterPoint | null {
-	return createTableCoordinateMapper(corners, tableSize)?.pixelToTable(point) ?? null;
+	return (
+		createTableCoordinateMapper(corners, tableSize)?.pixelToTable(point) ?? null
+	);
 }

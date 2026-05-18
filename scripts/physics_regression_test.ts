@@ -38,10 +38,16 @@ const assert: TestAssert = {
 	},
 	equal<T>(actual: T, expected: T, message = "Values should be equal"): void {
 		if (actual !== expected) {
-			throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
+			throw new Error(
+				`${message}: expected ${String(expected)}, got ${String(actual)}`,
+			);
 		}
 	},
-	deepEqual<T>(actual: T, expected: T, message = "Values should be deeply equal"): void {
+	deepEqual<T>(
+		actual: T,
+		expected: T,
+		message = "Values should be deeply equal",
+	): void {
 		if (JSON.stringify(actual) !== JSON.stringify(expected)) {
 			throw new Error(
 				`${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
@@ -80,7 +86,9 @@ function getEvents(result: PhysicsResult): PhysicsEvent[] {
 	return result.events ?? [];
 }
 
-function getSummary(result: PhysicsResult): NonNullable<PhysicsResult["summary"]> {
+function getSummary(
+	result: PhysicsResult,
+): NonNullable<PhysicsResult["summary"]> {
 	if (!result.summary) {
 		throw new Error("Physics result summary should exist");
 	}
@@ -100,15 +108,12 @@ function assertAlmostEqual(
 }
 
 {
-	const mapped = pixelToTableMeters(
-		{ x: 320, y: 180 },
-		[
-			{ x: 0, y: 0 },
-			{ x: 640, y: 0 },
-			{ x: 640, y: 360 },
-			{ x: 0, y: 360 },
-		],
-	);
+	const mapped = pixelToTableMeters({ x: 320, y: 180 }, [
+		{ x: 0, y: 0 },
+		{ x: 640, y: 0 },
+		{ x: 640, y: 360 },
+		{ x: 0, y: 360 },
+	]);
 
 	assert.ok(!!mapped, "pixelToTableMeters should map a valid table quad");
 	assertAlmostEqual(
@@ -196,7 +201,10 @@ function assertAlmostEqual(
 	);
 	const cueEnd = lastWaypoint(result, "cueBall");
 
-	assert.ok(getSummary(result).stopped, "Invalid prediction input should stop safely");
+	assert.ok(
+		getSummary(result).stopped,
+		"Invalid prediction input should stop safely",
+	);
 	assertAlmostEqual(
 		cueEnd.x,
 		0.6,
@@ -510,11 +518,7 @@ function assertAlmostEqual(
 		90,
 		"camera state should use camera cue angle",
 	);
-	assert.equal(
-		detected.cue.power,
-		1.4,
-		"camera state should use UI power",
-	);
+	assert.equal(detected.cue.power, 1.4, "camera state should use UI power");
 	assert.deepEqual(
 		detected.cue.hitPoint,
 		{ x: 0.25, y: -0.5 },

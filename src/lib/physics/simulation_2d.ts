@@ -137,9 +137,7 @@ export class Simulation2D {
 		this.updateBallPositionsMeters(ballPositions);
 	}
 
-	public updateBallPositionsMeters(
-		ballPositions: Record<string, Point>,
-	): void {
+	public updateBallPositionsMeters(ballPositions: Record<string, Point>): void {
 		const liveIds = new Set(Object.keys(ballPositions));
 
 		for (const [id, pos] of Object.entries(ballPositions)) {
@@ -250,8 +248,7 @@ export class Simulation2D {
 		);
 		const firstCueCushionHit = events.find(
 			(event) =>
-				event.type === "cushion-hit" &&
-				event.ballId === INTERNAL_CUE_BALL_ID,
+				event.type === "cushion-hit" && event.ballId === INTERNAL_CUE_BALL_ID,
 		);
 
 		const trajectoryList = Object.entries(trajectories).map(
@@ -331,10 +328,7 @@ export class Simulation2D {
 		if (!waypoints) return;
 
 		const lastWaypoint = waypoints.at(-1);
-		if (
-			!lastWaypoint ||
-			distance(lastWaypoint, position) > minDistance
-		) {
+		if (!lastWaypoint || distance(lastWaypoint, position) > minDistance) {
 			waypoints.push({ ...position });
 		}
 	}
@@ -424,7 +418,8 @@ export class Simulation2D {
 				y: ball.position.y + direction.y * maxTravel,
 			};
 			const nextSpeed = this.speedAfter(speed, deceleration, timeLeft);
-			ball.velocity = nextSpeed > 0 ? scale(direction, nextSpeed) : { x: 0, y: 0 };
+			ball.velocity =
+				nextSpeed > 0 ? scale(direction, nextSpeed) : { x: 0, y: 0 };
 			return { usedTime: timeLeft, collided: false };
 		}
 
@@ -481,7 +476,8 @@ export class Simulation2D {
 			});
 		}
 
-		if (!closest || closest.travel < 0 || closest.travel > maxTravel) return null;
+		if (!closest || closest.travel < 0 || closest.travel > maxTravel)
+			return null;
 		return closest;
 	}
 
@@ -985,7 +981,10 @@ export class Simulation2D {
 
 			if (type === "cushion") {
 				const ball = this.balls.get(first);
-				if (!ball || !this.isCushionContactActive(ball, second as CushionSide)) {
+				if (
+					!ball ||
+					!this.isCushionContactActive(ball, second as CushionSide)
+				) {
 					activeContacts.delete(key);
 				}
 				continue;
@@ -994,7 +993,11 @@ export class Simulation2D {
 			if (type === "ball") {
 				const a = this.balls.get(first);
 				const b = this.balls.get(second);
-				if (!a || !b || distance(a.position, b.position) > BALL_RADIUS_M * 2 + 1e-4) {
+				if (
+					!a ||
+					!b ||
+					distance(a.position, b.position) > BALL_RADIUS_M * 2 + 1e-4
+				) {
 					activeContacts.delete(key);
 				}
 			}
@@ -1008,11 +1011,15 @@ export class Simulation2D {
 			case "left":
 				return ball.position.x <= BALL_RADIUS_M + contactTolerance;
 			case "right":
-				return ball.position.x >= TABLE_WIDTH_M - BALL_RADIUS_M - contactTolerance;
+				return (
+					ball.position.x >= TABLE_WIDTH_M - BALL_RADIUS_M - contactTolerance
+				);
 			case "top":
 				return ball.position.y <= BALL_RADIUS_M + contactTolerance;
 			case "bottom":
-				return ball.position.y >= TABLE_HEIGHT_M - BALL_RADIUS_M - contactTolerance;
+				return (
+					ball.position.y >= TABLE_HEIGHT_M - BALL_RADIUS_M - contactTolerance
+				);
 		}
 	}
 
@@ -1070,7 +1077,9 @@ export class Simulation2D {
 		step: number,
 		ballId: string,
 	): boolean {
-		return events.some((event) => event.step === step && event.ballId === ballId);
+		return events.some(
+			(event) => event.step === step && event.ballId === ballId,
+		);
 	}
 
 	private saveState(): SavedState {
@@ -1106,16 +1115,12 @@ export class Simulation2D {
 	}
 
 	private emptyResult(): PhysicsResult {
-		return this.toPublicResult(
-			[],
-			[],
-			{
-				stepCount: 0,
-				stopped: true,
-				travelDistanceByBall: {},
-				finalPositions: {},
-			},
-		);
+		return this.toPublicResult([], [], {
+			stepCount: 0,
+			stopped: true,
+			travelDistanceByBall: {},
+			finalPositions: {},
+		});
 	}
 
 	private toPublicResult(
@@ -1159,8 +1164,16 @@ export class Simulation2D {
 
 	private clampToTable(position: Vec2): Vec2 {
 		return {
-			x: clamp(position.x, POSITION_MARGIN_M, TABLE_WIDTH_M - POSITION_MARGIN_M),
-			y: clamp(position.y, POSITION_MARGIN_M, TABLE_HEIGHT_M - POSITION_MARGIN_M),
+			x: clamp(
+				position.x,
+				POSITION_MARGIN_M,
+				TABLE_WIDTH_M - POSITION_MARGIN_M,
+			),
+			y: clamp(
+				position.y,
+				POSITION_MARGIN_M,
+				TABLE_HEIGHT_M - POSITION_MARGIN_M,
+			),
 		};
 	}
 

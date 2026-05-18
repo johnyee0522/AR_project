@@ -41,7 +41,9 @@ export function createCameraDetectedState(
 			cueBallId: ui.cueBallId ?? DEFAULT_CAMERA_CUE_BALL_ID,
 		},
 		balls: camera.balls
-			.filter((ball) => Number.isFinite(ball.tableX) && Number.isFinite(ball.tableY))
+			.filter(
+				(ball) => Number.isFinite(ball.tableX) && Number.isFinite(ball.tableY),
+			)
 			.map((ball) => ({
 				id: ball.id,
 				x: ball.tableX,

@@ -26,7 +26,12 @@ function Minimap({ visible, ref }: MinimapProps) {
 			onClick={() => setIsEnlarged(!isEnlarged)}
 		>
 			<p className={styles.label}>{isEnlarged ? "CLOSE" : "MINIMAP"}</p>
-			<canvas ref={ref} width={width} height={height} className={styles.canvas} />
+			<canvas
+				ref={ref}
+				width={width}
+				height={height}
+				className={styles.canvas}
+			/>
 		</div>
 	);
 }

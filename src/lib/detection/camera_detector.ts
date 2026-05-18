@@ -1,11 +1,5 @@
-import {
-	TABLE_HEIGHT_M,
-	TABLE_WIDTH_M,
-} from "@/lib/physics/physics_constants";
-import {
-	pixelToTableMeters,
-	type PixelPoint,
-} from "./table_coordinate";
+import { TABLE_HEIGHT_M, TABLE_WIDTH_M } from "@/lib/physics/physics_constants";
+import { pixelToTableMeters, type PixelPoint } from "./table_coordinate";
 
 export interface CameraDetectionResult {
 	table: {
@@ -112,7 +106,10 @@ function toCameraBall(
 	ball: MockBallPixelRatio,
 	corners: readonly PixelPoint[],
 ): CameraDetectionResult["balls"][number] | null {
-	const tablePoint = pixelToTableMeters(ratioToPixelPoint(ball, corners), corners);
+	const tablePoint = pixelToTableMeters(
+		ratioToPixelPoint(ball, corners),
+		corners,
+	);
 	if (!tablePoint) return null;
 
 	return {
