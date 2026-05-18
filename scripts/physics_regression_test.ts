@@ -8,7 +8,10 @@ import {
 	predictShot,
 	toPredictShotInput,
 } from "../src/lib/physics";
+import { createCameraDetectedState } from "../src/lib/detection/camera_detected_state";
+import { createMockCameraDetectionResult } from "../src/lib/detection/camera_detector";
 import { createDevDetectedState } from "../src/lib/detection/dev_detected_state";
+import { pixelToTableMeters } from "../src/lib/detection/table_coordinate";
 import {
 	BALL_RADIUS_M,
 	TABLE_HEIGHT_M,
@@ -93,6 +96,32 @@ function assertAlmostEqual(
 	assert.ok(
 		Math.abs(actual - expected) <= tolerance,
 		`${message}: expected ${expected}, got ${actual}`,
+	);
+}
+
+{
+	const mapped = pixelToTableMeters(
+		{ x: 320, y: 180 },
+		[
+			{ x: 0, y: 0 },
+			{ x: 640, y: 0 },
+			{ x: 640, y: 360 },
+			{ x: 0, y: 360 },
+		],
+	);
+
+	assert.ok(!!mapped, "pixelToTableMeters should map a valid table quad");
+	assertAlmostEqual(
+		mapped?.x ?? Number.NaN,
+		TABLE_WIDTH_M / 2,
+		EPSILON_M,
+		"pixel x should convert to table meter x",
+	);
+	assertAlmostEqual(
+		mapped?.y ?? Number.NaN,
+		TABLE_HEIGHT_M / 2,
+		EPSILON_M,
+		"pixel y should convert to table meter y",
 	);
 }
 
@@ -447,6 +476,93 @@ function assertAlmostEqual(
 		{ id: "red", x: 1.15, y: TABLE_HEIGHT_M / 2 },
 		{ id: "yellow", x: 1.7, y: TABLE_HEIGHT_M / 2 },
 	]);
+}
+
+{
+	const detected = createCameraDetectedState(
+		{
+			table: {
+				corners: [
+					{ x: 0, y: 0 },
+					{ x: 640, y: 0 },
+					{ x: 640, y: 360 },
+					{ x: 0, y: 360 },
+				],
+			},
+			cue: {
+				angleDeg: 90,
+			},
+			balls: [
+				{ id: "white", tableX: 0.6, tableY: TABLE_HEIGHT_M / 2 },
+				{ id: "red", tableX: 1.15, tableY: TABLE_HEIGHT_M / 2 },
+			],
+		},
+		{
+			power: 1.4,
+			sideSpin: 0.25,
+			topSpin: -0.5,
+		},
+	);
+	const input = toPredictShotInput(detected);
+
+	assert.equal(
+		detected.cue.angleDeg,
+		90,
+		"camera state should use camera cue angle",
+	);
+	assert.equal(
+		detected.cue.power,
+		1.4,
+		"camera state should use UI power",
+	);
+	assert.deepEqual(
+		detected.cue.hitPoint,
+		{ x: 0.25, y: -0.5 },
+		"camera state should use UI hit point",
+	);
+	assert.equal(
+		detected.shot.cueBallId,
+		"white",
+		"camera state should default cue ball id to white",
+	);
+	assert.deepEqual(
+		detected.balls[0],
+		{ id: "white", x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		"camera balls should be meter-space DetectedState balls",
+	);
+	assert.deepEqual(
+		input.balls["cueBall"],
+		{ x: 0.6, y: TABLE_HEIGHT_M / 2 },
+		"camera cue ball should enter the common physics adapter",
+	);
+}
+
+{
+	const mockDetected = createCameraDetectedState(
+		createMockCameraDetectionResult({ width: 1280, height: 720 }),
+		{
+			power: 1,
+			sideSpin: 0,
+			topSpin: 0,
+		},
+	);
+	const result = predictDetectedState(mockDetected);
+
+	assert.equal(mockDetected.shot.cueBallId, "white");
+	assert.ok(
+		mockDetected.balls.every(
+			(ball) =>
+				ball.x >= 0 &&
+				ball.x <= TABLE_WIDTH_M &&
+				ball.y >= 0 &&
+				ball.y <= TABLE_HEIGHT_M,
+		),
+		"mock camera balls should already be table meter coordinates",
+	);
+	assert.ok(
+		!!getSummary(result).finalPositions.cueBall,
+		"mock camera state should run through the shared physics engine",
+	);
 }
 
 {

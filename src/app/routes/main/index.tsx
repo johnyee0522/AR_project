@@ -3,7 +3,7 @@ import ARButton from "@/components/ar_button/ar_button";
 import DevLog from "@/components/dev_log/dev_log";
 import Minimap from "@/components/minimap/minimap";
 import useAR from "@/hooks/use_ar";
-import useCamera from "@/hooks/use_camera";
+import useCamera, { type DetectionMode } from "@/hooks/use_camera";
 import useSimulation from "@/hooks/use_simulation";
 import { toPredictShotInput } from "@/lib/physics";
 import type { DetectedState } from "@/types/detection";
@@ -23,6 +23,8 @@ const TEST_PANEL_BALLS = [
 	{ id: "yellow", label: "\ubaa9\uc801\uad6c 2" },
 ] as const;
 
+const SPIN_MM_TO_HIT_POINT = 1 / 100;
+
 function Main() {
 	const videoCanvasRef = useRef<HTMLCanvasElement>(null);
 	const arCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,6 +42,9 @@ function Main() {
 		sideSpin: 0,
 		topSpin: 0,
 	});
+	const [inputSource, setInputSource] = useState<DetectionMode>(
+		import.meta.env.DEV ? "simulator" : "camera",
+	);
 	const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
 	const [cueTravelMeters, setCueTravelMeters] = useState(0);
 
@@ -52,16 +57,14 @@ function Main() {
 
 	const handleFrame = useCallback(
 		(detected: DetectedState | null) => {
-			const predictInput = detected
-				? toPredictShotInput(detected)
-				: {
-						balls: gameState.balls,
-						angleDeg: gameState.angleDeg,
-						power: gameState.power,
-						sideSpin: gameState.sideSpin,
-						topSpin: gameState.topSpin,
-						maxSteps: 2400,
-					};
+			if (!detected) {
+				predictionCacheRef.current = null;
+				setCueTravelMeters((prev) => (prev === 0 ? prev : 0));
+				drawAR(null);
+				return;
+			}
+
+			const predictInput = toPredictShotInput(detected);
 			const predictionKey = JSON.stringify({
 				predictInput,
 				tuningVersion,
@@ -91,13 +94,27 @@ function Main() {
 
 			drawAR(physicsResult);
 		},
-		[drawAR, sim, gameState, tuningVersion],
+		[drawAR, sim, tuningVersion],
 	);
+
+	const handleARButtonClick = useCallback(() => {
+		if (!isARMode) {
+			setInputSource("camera");
+		}
+		toggleARMode();
+	}, [isARMode, toggleARMode]);
 
 	const { cameraReady, errorMsg } = useCamera({
 		videoCanvasRef,
 		onFrame: handleFrame,
-		devInput: {
+		inputSource,
+		cameraUiInput: {
+			power: gameState.power,
+			sideSpin: gameState.sideSpin * SPIN_MM_TO_HIT_POINT,
+			topSpin: gameState.topSpin * SPIN_MM_TO_HIT_POINT,
+			cueBallId: "white",
+		},
+		simulatorInput: {
 			balls: gameState.balls,
 			angleDeg: gameState.angleDeg,
 			power: gameState.power,
@@ -179,6 +196,29 @@ function Main() {
 			<div className={styles.controls}>
 				<div className={styles.debugRow}>
 					<div className={styles.debugGroup}>
+						<span className={styles.debugLabel}>INPUT</span>
+						<div className={styles.debugTrack}>
+							<button
+								type="button"
+								className={`${styles.openTestBtn} ${
+									inputSource === "camera" ? styles.active : ""
+								}`}
+								onClick={() => setInputSource("camera")}
+							>
+								CAM
+							</button>
+							<button
+								type="button"
+								className={`${styles.openTestBtn} ${
+									inputSource === "simulator" ? styles.active : ""
+								}`}
+								onClick={() => setInputSource("simulator")}
+							>
+								SIM
+							</button>
+						</div>
+					</div>
+					<div className={styles.debugGroup}>
 						<span className={styles.debugLabel}>TEST</span>
 						<div className={styles.debugTrack}>
 							<button
@@ -193,7 +233,7 @@ function Main() {
 						</div>
 					</div>
 				</div>
-				<ARButton isARMode={isARMode} onClick={toggleARMode} />
+				<ARButton isARMode={isARMode} onClick={handleARButtonClick} />
 			</div>
 
 			<DevLog />
