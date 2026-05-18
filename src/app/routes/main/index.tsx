@@ -399,16 +399,6 @@ function Main() {
 				)}
 			</div>
 
-			{false && inputSource === "camera" && (
-				<button
-					type="button"
-					className={styles.controlVisibilityButton}
-					onClick={() => setIsControlUiHidden((prev) => !prev)}
-				>
-					{isControlUiHidden ? "UI 표시" : "UI 숨김"}
-				</button>
-			)}
-
 			<DevLog />
 		</div>
 	);

@@ -45,6 +45,12 @@ const BALL_COLORS: Record<string, string> = {
 };
 const FALLBACK_COLOR = "#00e5ff";
 
+function devLog(message: string, data?: unknown): void {
+	if (import.meta.env.DEV) {
+		logger.debug(data ?? {}, message);
+	}
+}
+
 function getBallColor(ballId: string): string {
 	return BALL_COLORS[ballId] ?? FALLBACK_COLOR;
 }
@@ -66,6 +72,37 @@ function getTableViewport(canvas: HTMLCanvasElement): TableViewport {
 	};
 }
 
+function getCanvasCssSize(
+	canvas: HTMLCanvasElement,
+	fallbackElement?: HTMLElement | null,
+): { width: number; height: number } | null {
+	const rect = canvas.getBoundingClientRect();
+	const fallbackRect = fallbackElement?.getBoundingClientRect();
+	const width = rect.width || fallbackRect?.width || 0;
+	const height = rect.height || fallbackRect?.height || 0;
+
+	if (width <= 0 || height <= 0) return null;
+	return { width, height };
+}
+
+function resizeCanvasBackingStore(
+	canvas: HTMLCanvasElement,
+	cssSize: { width: number; height: number },
+): boolean {
+	const devicePixelRatio = window.devicePixelRatio || 1;
+	const nextWidth = Math.max(1, Math.round(cssSize.width * devicePixelRatio));
+	const nextHeight = Math.max(1, Math.round(cssSize.height * devicePixelRatio));
+
+	if (canvas.width === nextWidth && canvas.height === nextHeight) {
+		return false;
+	}
+
+	canvas.width = nextWidth;
+	canvas.height = nextHeight;
+	devLog("canvas resized", { width: nextWidth, height: nextHeight });
+	return true;
+}
+
 function toCanvasPoint(point: Point, viewport: TableViewport): PixelPoint {
 	return {
 		x: viewport.x + point.x * viewport.pixelsPerMeter,
@@ -80,19 +117,55 @@ function useAR({
 }: UseAROptions): UseARReturn {
 	const [isARMode, setIsARMode] = useState(false);
 	const isARModeRef = useRef(false);
+	const lastDrawRef = useRef<{
+		result: PhysicsResult | null;
+		options: DrawAROptions;
+	} | null>(null);
+
+	const resizeCanvases = useCallback((): boolean => {
+		const canvas = arCanvasRef.current;
+		const minimapCanvas = minimapCanvasRef.current;
+		if (!canvas || !minimapCanvas) return false;
+
+		const arSize = getCanvasCssSize(canvas, containerRef.current);
+		const minimapSize = getCanvasCssSize(minimapCanvas);
+		if (!arSize || !minimapSize) {
+			devLog("canvas resize skipped because canvas size is zero", {
+				hasArSize: !!arSize,
+				hasMinimapSize: !!minimapSize,
+			});
+			return false;
+		}
+
+		const arChanged = resizeCanvasBackingStore(canvas, arSize);
+		const minimapChanged = resizeCanvasBackingStore(minimapCanvas, minimapSize);
+		return arChanged || minimapChanged;
+	}, [arCanvasRef, containerRef, minimapCanvasRef]);
 
 	useEffect(() => {
 		const handleResize = () => {
-			const canvas = arCanvasRef.current;
-			if (canvas && containerRef.current) {
-				canvas.width = containerRef.current.clientWidth;
-				canvas.height = containerRef.current.clientHeight;
+			devLog("viewport resized", {
+				innerWidth: window.innerWidth,
+				innerHeight: window.innerHeight,
+				devicePixelRatio: window.devicePixelRatio,
+			});
+			const resized = resizeCanvases();
+			if (resized && lastDrawRef.current) {
+				drawAR(lastDrawRef.current.result, lastDrawRef.current.options);
 			}
+		};
+		const handleOrientationChange = () => {
+			devLog("orientation changed");
+			window.requestAnimationFrame(handleResize);
 		};
 		handleResize();
 		window.addEventListener("resize", handleResize);
-		return () => window.removeEventListener("resize", handleResize);
-	}, [arCanvasRef, containerRef]);
+		window.addEventListener("orientationchange", handleOrientationChange);
+		return () => {
+			window.removeEventListener("resize", handleResize);
+			window.removeEventListener("orientationchange", handleOrientationChange);
+		};
+	}, [resizeCanvases]);
 
 	const toggleARMode = useCallback(() => {
 		setIsARMode((prev) => {
@@ -105,13 +178,27 @@ function useAR({
 
 	const drawAR = useCallback(
 		(result: PhysicsResult | null, options: DrawAROptions = {}) => {
+			lastDrawRef.current = { result, options };
 			const canvas = arCanvasRef.current;
 			const minimapCanvas = minimapCanvasRef.current;
 			if (!canvas || !minimapCanvas) return;
+			resizeCanvases();
+			if (
+				canvas.width <= 0 ||
+				canvas.height <= 0 ||
+				minimapCanvas.width <= 0 ||
+				minimapCanvas.height <= 0
+			) {
+				devLog("AR draw skipped because canvas size is zero");
+				return;
+			}
 
 			const ctx = canvas.getContext("2d");
 			const mCtx = minimapCanvas.getContext("2d");
-			if (!ctx || !mCtx) return;
+			if (!ctx || !mCtx) {
+				devLog("AR draw skipped because canvas context is unavailable");
+				return;
+			}
 
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			mCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
@@ -169,7 +256,7 @@ function useAR({
 				}
 			}
 		},
-		[arCanvasRef, minimapCanvasRef],
+		[arCanvasRef, minimapCanvasRef, resizeCanvases],
 	);
 
 	return { isARMode, toggleARMode, drawAR };

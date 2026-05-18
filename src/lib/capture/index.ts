@@ -34,8 +34,15 @@ async function createFrameCapture(
 					break;
 				}
 
-				await callback(frame);
-				frame.close();
+				try {
+					await callback(frame);
+				} catch (err) {
+					if (!signal.aborted && import.meta.env.DEV) {
+						console.debug("[DEBUG]", "camera frame callback failed", err);
+					}
+				} finally {
+					frame.close();
+				}
 			}
 		},
 	};
