@@ -17,7 +17,12 @@ interface UseAROptions {
 interface UseARReturn {
 	isARMode: boolean;
 	toggleARMode: () => void;
-	drawAR: (result: PhysicsResult | null) => void;
+	drawAR: (result: PhysicsResult | null, options?: DrawAROptions) => void;
+}
+
+interface DrawAROptions {
+	showMainOverlay?: boolean;
+	showMinimap?: boolean;
 }
 
 interface PixelPoint {
@@ -99,7 +104,7 @@ function useAR({
 	}, []);
 
 	const drawAR = useCallback(
-		(result: PhysicsResult | null) => {
+		(result: PhysicsResult | null, options: DrawAROptions = {}) => {
 			const canvas = arCanvasRef.current;
 			const minimapCanvas = minimapCanvasRef.current;
 			if (!canvas || !minimapCanvas) return;
@@ -111,25 +116,30 @@ function useAR({
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			mCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
 
-			if (!isARModeRef.current || !result) return;
+			const showMainOverlay =
+				options.showMainOverlay ?? isARModeRef.current;
+			const showMinimap = options.showMinimap ?? isARModeRef.current;
+			if (!result || (!showMainOverlay && !showMinimap)) return;
 
-			const arViewport = getTableViewport(canvas);
-			const minimapViewport = getTableViewport(minimapCanvas);
+			const arViewport = showMainOverlay ? getTableViewport(canvas) : null;
+			const minimapViewport = showMinimap ? getTableViewport(minimapCanvas) : null;
 
-			drawTableBounds(mCtx, minimapViewport);
+			if (minimapViewport) {
+				drawTableBounds(mCtx, minimapViewport);
+			}
 
 			for (const trajectory of result.trajectories) {
 				const color = getBallColor(trajectory.ballId);
-				const arWaypoints = trajectory.waypoints.map((point) =>
-					toCanvasPoint(point, arViewport),
-				);
-				const minimapWaypoints = trajectory.waypoints.map((point) =>
-					toCanvasPoint(point, minimapViewport),
-				);
+				const arWaypoints = arViewport
+					? trajectory.waypoints.map((point) => toCanvasPoint(point, arViewport))
+					: [];
+				const minimapWaypoints = minimapViewport
+					? trajectory.waypoints.map((point) =>
+							toCanvasPoint(point, minimapViewport),
+						)
+					: [];
 
-				if (minimapWaypoints.length === 0) continue;
-
-				if (arWaypoints.length >= 2) {
+				if (arViewport && arWaypoints.length >= 2) {
 					const dashSize = Math.max(6, arViewport.pixelsPerMeter * 0.035);
 					drawTrajectoryLine(ctx, arWaypoints, color, {
 						dashed: true,
@@ -139,7 +149,7 @@ function useAR({
 					});
 				}
 
-				if (minimapWaypoints.length >= 2) {
+				if (minimapViewport && minimapWaypoints.length >= 2) {
 					const dashSize = Math.max(3, minimapViewport.pixelsPerMeter * 0.04);
 					drawTrajectoryLine(mCtx, minimapWaypoints, color, {
 						dashed: true,
@@ -148,13 +158,15 @@ function useAR({
 					});
 				}
 
-				drawBallPoint(
-					mCtx,
-					minimapWaypoints[0],
-					color,
-					Math.max(2.5, minimapViewport.pixelsPerMeter * BALL_RADIUS_M),
-					false,
-				);
+				if (minimapViewport && minimapWaypoints.length > 0) {
+					drawBallPoint(
+						mCtx,
+						minimapWaypoints[0],
+						color,
+						Math.max(2.5, minimapViewport.pixelsPerMeter * BALL_RADIUS_M),
+						false,
+					);
+				}
 			}
 		},
 		[arCanvasRef, minimapCanvasRef],

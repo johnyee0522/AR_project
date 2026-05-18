@@ -101,7 +101,7 @@
 	transform: translateX(-50%);
 	z-index: 10;
 	width: 60%;
-	max-width: 200px;
+	max-width: 240px;
 	background-color: rgba(20, 20, 20, 0.65);
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
@@ -193,6 +193,63 @@
 	background-color: rgba(0, 229, 255, 0.2);
 	color: #00e5ff;
 	box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+}
+
+.cameraShotPanel {
+	display: grid;
+	gap: 8px;
+	padding: 8px;
+	border-radius: 8px;
+	background-color: rgba(0, 0, 0, 0.32);
+}
+
+.cameraShotPanel label {
+	display: grid;
+	gap: 4px;
+	color: rgba(255, 255, 255, 0.72);
+	font-size: 10px;
+	font-weight: 700;
+}
+
+.cameraShotPanel span {
+	white-space: nowrap;
+}
+
+.cameraShotPanel input[type="range"] {
+	width: 100%;
+}
+
+.cameraSpinPadRow {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+}
+
+.cameraSpinPadRow .spinPad {
+	width: 82px;
+}
+
+.actionRow {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.actionRow:has(> :only-child) {
+	grid-template-columns: 1fr;
+}
+
+.controlVisibilityButton {
+	width: 100%;
+	min-height: 38px;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 8px;
+	background-color: rgba(0, 0, 0, 0.62);
+	color: rgba(255, 255, 255, 0.84);
+	font-size: 11px;
+	font-weight: 800;
+	cursor: pointer;
 }
 
 .testPanel {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import ARButton from "@/components/ar_button/ar_button";
 import DevLog from "@/components/dev_log/dev_log";
 import Minimap from "@/components/minimap/minimap";
@@ -13,8 +13,8 @@ import styles from "./main.module.css";
 
 const DEFAULT_BALL_POSITIONS: BallPositions = {
 	cueBall: { x: 0.57, y: 1.07 },
-	red: { x: 1.42, y: 0.71 },
-	yellow: { x: 1.99, y: 0.43 },
+	red: { x: 1, y: 0.71 },
+	yellow: { x: 1.23, y: 0.36 },
 };
 
 const TEST_PANEL_BALLS = [
@@ -24,6 +24,16 @@ const TEST_PANEL_BALLS = [
 ] as const;
 
 const SPIN_MM_TO_HIT_POINT = 1 / 100;
+const POWER_MIN = 0;
+const POWER_MAX = 3;
+const POWER_STEP = 0.1;
+const SPIN_MIN_MM = -100;
+const SPIN_MAX_MM = 100;
+
+function clampValue(value: number, min: number, max: number) {
+	if (!Number.isFinite(value)) return min;
+	return Math.max(min, Math.min(max, value));
+}
 
 function Main() {
 	const videoCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,8 +47,13 @@ function Main() {
 
 	const [gameState, setGameState] = useState({
 		balls: DEFAULT_BALL_POSITIONS,
-		angleDeg: 45,
-		power: 0.5,
+		angleDeg: 315,
+		power: 1.5,
+		sideSpin: 0,
+		topSpin: 0,
+	});
+	const [cameraShotInput, setCameraShotInput] = useState({
+		power: 1.5,
 		sideSpin: 0,
 		topSpin: 0,
 	});
@@ -47,6 +62,7 @@ function Main() {
 	);
 	const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
 	const [cueTravelMeters, setCueTravelMeters] = useState(0);
+	const [isControlUiHidden, setIsControlUiHidden] = useState(false);
 
 	const { isARMode, toggleARMode, drawAR } = useAR({
 		arCanvasRef,
@@ -54,13 +70,39 @@ function Main() {
 		containerRef,
 	});
 	const { sim, tuningVersion } = useSimulation();
+	const canUseTestPanel = inputSource === "simulator";
+	const shouldShowMainTrajectory =
+		inputSource === "simulator" || (inputSource === "camera" && isARMode);
+	const shouldShowMinimap = inputSource === "simulator" || isARMode;
+	const shouldShowCameraShotControls =
+		inputSource === "camera" && isARMode && !isControlUiHidden;
+	const shouldShowARButton =
+		inputSource !== "camera" || !isControlUiHidden;
+	const shouldShowInputControls =
+		inputSource !== "camera" || !isControlUiHidden;
+	const shouldShowControlVisibilityButton = inputSource === "camera";
+
+	useEffect(() => {
+		if (!canUseTestPanel) {
+			setIsTestPanelOpen(false);
+		}
+	}, [canUseTestPanel]);
+
+	useEffect(() => {
+		if (inputSource !== "camera") {
+			setIsControlUiHidden(false);
+		}
+	}, [inputSource]);
 
 	const handleFrame = useCallback(
 		(detected: DetectedState | null) => {
 			if (!detected) {
 				predictionCacheRef.current = null;
 				setCueTravelMeters((prev) => (prev === 0 ? prev : 0));
-				drawAR(null);
+				drawAR(null, {
+					showMainOverlay: shouldShowMainTrajectory,
+					showMinimap: shouldShowMinimap,
+				});
 				return;
 			}
 
@@ -92,26 +134,75 @@ function Main() {
 				Math.abs(prev - nextCueTravel) > 0.005 ? nextCueTravel : prev,
 			);
 
-			drawAR(physicsResult);
+			drawAR(physicsResult, {
+				showMainOverlay: shouldShowMainTrajectory,
+				showMinimap: shouldShowMinimap,
+			});
 		},
-		[drawAR, sim, tuningVersion],
+		[
+			drawAR,
+			shouldShowMainTrajectory,
+			shouldShowMinimap,
+			sim,
+			tuningVersion,
+		],
 	);
 
 	const handleARButtonClick = useCallback(() => {
-		if (!isARMode) {
+		if (!isARMode && inputSource !== "simulator") {
 			setInputSource("camera");
 		}
 		toggleARMode();
-	}, [isARMode, toggleARMode]);
+	}, [inputSource, isARMode, toggleARMode]);
+
+	const selectCameraSpinPoint = useCallback(
+		(event: PointerEvent<HTMLButtonElement>) => {
+			const rect = event.currentTarget.getBoundingClientRect();
+			const centerX = rect.left + rect.width / 2;
+			const centerY = rect.top + rect.height / 2;
+			const radius = rect.width / 2;
+			const rawX = (event.clientX - centerX) / radius;
+			const rawY = (event.clientY - centerY) / radius;
+			const distance = Math.hypot(rawX, rawY);
+			const clampedX = distance > 1 ? rawX / distance : rawX;
+			const clampedY = distance > 1 ? rawY / distance : rawY;
+
+			setCameraShotInput((prev) => ({
+				...prev,
+				sideSpin: Math.round(clampedX * SPIN_MAX_MM),
+				topSpin: Math.round(-clampedY * SPIN_MAX_MM),
+			}));
+		},
+		[],
+	);
+
+	const resetCameraSpin = useCallback(() => {
+		setCameraShotInput((prev) => ({
+			...prev,
+			sideSpin: 0,
+			topSpin: 0,
+		}));
+	}, []);
+
+	const cameraSpinMarkerX =
+		50 +
+		(clampValue(cameraShotInput.sideSpin, SPIN_MIN_MM, SPIN_MAX_MM) /
+			SPIN_MAX_MM) *
+			50;
+	const cameraSpinMarkerY =
+		50 -
+		(clampValue(cameraShotInput.topSpin, SPIN_MIN_MM, SPIN_MAX_MM) /
+			SPIN_MAX_MM) *
+			50;
 
 	const { cameraReady, errorMsg } = useCamera({
 		videoCanvasRef,
 		onFrame: handleFrame,
 		inputSource,
 		cameraUiInput: {
-			power: gameState.power,
-			sideSpin: gameState.sideSpin * SPIN_MM_TO_HIT_POINT,
-			topSpin: gameState.topSpin * SPIN_MM_TO_HIT_POINT,
+			power: cameraShotInput.power,
+			sideSpin: cameraShotInput.sideSpin * SPIN_MM_TO_HIT_POINT,
+			topSpin: cameraShotInput.topSpin * SPIN_MM_TO_HIT_POINT,
 			cueBallId: "white",
 		},
 		simulatorInput: {
@@ -160,9 +251,12 @@ function Main() {
 				)}
 			</div>
 
-			<Minimap ref={minimapCanvasRef} visible={isARMode && cameraReady} />
+			<Minimap
+				ref={minimapCanvasRef}
+				visible={cameraReady && shouldShowMinimap}
+			/>
 
-			{isTestPanelOpen && (
+			{canUseTestPanel && isTestPanelOpen && (
 				<TestPanel
 					balls={gameState.balls}
 					ballControls={TEST_PANEL_BALLS}
@@ -194,47 +288,126 @@ function Main() {
 			)}
 
 			<div className={styles.controls}>
-				<div className={styles.debugRow}>
-					<div className={styles.debugGroup}>
-						<span className={styles.debugLabel}>INPUT</span>
-						<div className={styles.debugTrack}>
-							<button
-								type="button"
-								className={`${styles.openTestBtn} ${
-									inputSource === "camera" ? styles.active : ""
-								}`}
-								onClick={() => setInputSource("camera")}
-							>
-								CAM
-							</button>
-							<button
-								type="button"
-								className={`${styles.openTestBtn} ${
-									inputSource === "simulator" ? styles.active : ""
-								}`}
-								onClick={() => setInputSource("simulator")}
-							>
-								SIM
-							</button>
+				{shouldShowInputControls && (
+					<div className={styles.debugRow}>
+						<div className={styles.debugGroup}>
+							<span className={styles.debugLabel}>INPUT</span>
+							<div className={styles.debugTrack}>
+								<button
+									type="button"
+									className={`${styles.openTestBtn} ${
+										inputSource === "camera" ? styles.active : ""
+									}`}
+									onClick={() => setInputSource("camera")}
+								>
+									CAM
+								</button>
+								<button
+									type="button"
+									className={`${styles.openTestBtn} ${
+										inputSource === "simulator" ? styles.active : ""
+									}`}
+									onClick={() => setInputSource("simulator")}
+								>
+									SIM
+								</button>
+							</div>
 						</div>
+						{canUseTestPanel && (
+							<div className={styles.debugGroup}>
+								<span className={styles.debugLabel}>TEST</span>
+								<div className={styles.debugTrack}>
+									<button
+										type="button"
+										className={`${styles.openTestBtn} ${
+											isTestPanelOpen ? styles.active : ""
+										}`}
+										onClick={() => setIsTestPanelOpen((prev) => !prev)}
+									>
+										Panel
+									</button>
+								</div>
+							</div>
+						)}
 					</div>
-					<div className={styles.debugGroup}>
-						<span className={styles.debugLabel}>TEST</span>
-						<div className={styles.debugTrack}>
+				)}
+				{shouldShowCameraShotControls && (
+					<div className={styles.cameraShotPanel}>
+						<label>
+							<span>{`Power ${cameraShotInput.power.toFixed(1)}`}</span>
+							<input
+								type="range"
+								min={POWER_MIN}
+								max={POWER_MAX}
+								step={POWER_STEP}
+								value={cameraShotInput.power}
+								onChange={(event) =>
+									setCameraShotInput((prev) => ({
+										...prev,
+										power: Number(event.target.value),
+									}))
+								}
+							/>
+						</label>
+						<label>
+							<span>
+								{`Spin side ${cameraShotInput.sideSpin}mm / top ${cameraShotInput.topSpin}mm`}
+							</span>
+							<div className={styles.cameraSpinPadRow}>
+								<button
+									type="button"
+									className={styles.spinPad}
+									onPointerDown={selectCameraSpinPoint}
+									aria-label="Select camera shot hit point"
+								>
+									<span className={styles.spinGuideHorizontal} />
+									<span className={styles.spinGuideVertical} />
+									<span
+										className={styles.spinMarker}
+										style={{
+											left: `${cameraSpinMarkerX}%`,
+											top: `${cameraSpinMarkerY}%`,
+										}}
+									/>
+								</button>
+								<button
+									type="button"
+									className={styles.spinResetButton}
+									onClick={resetCameraSpin}
+								>
+									Center
+								</button>
+							</div>
+						</label>
+					</div>
+				)}
+				{(shouldShowControlVisibilityButton || shouldShowARButton) && (
+					<div className={styles.actionRow}>
+						{shouldShowControlVisibilityButton && (
 							<button
 								type="button"
-								className={`${styles.openTestBtn} ${
-									isTestPanelOpen ? styles.active : ""
-								}`}
-								onClick={() => setIsTestPanelOpen((prev) => !prev)}
+								className={styles.controlVisibilityButton}
+								onClick={() => setIsControlUiHidden((prev) => !prev)}
 							>
-								Panel
+								{isControlUiHidden ? "UI \ud45c\uc2dc" : "UI \uc228\uae40"}
 							</button>
-						</div>
+						)}
+						{shouldShowARButton && (
+							<ARButton isARMode={isARMode} onClick={handleARButtonClick} />
+						)}
 					</div>
-				</div>
-				<ARButton isARMode={isARMode} onClick={handleARButtonClick} />
+				)}
 			</div>
+
+			{false && inputSource === "camera" && (
+				<button
+					type="button"
+					className={styles.controlVisibilityButton}
+					onClick={() => setIsControlUiHidden((prev) => !prev)}
+				>
+					{isControlUiHidden ? "UI 표시" : "UI 숨김"}
+				</button>
+			)}
 
 			<DevLog />
 		</div>

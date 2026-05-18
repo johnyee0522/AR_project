@@ -23,6 +23,11 @@ export function createCameraDetectedState(
 	camera: CameraDetectionResult,
 	ui: CameraDetectedStateUiInput,
 ): DetectedState {
+	// CAM mode value sources:
+	// - angleDeg comes from camera/mock cue detection.
+	// - power comes from the UI control.
+	// - hitPoint comes from the UI spin controls.
+	// - balls come from camera/mock detection in table meter coordinates.
 	return {
 		cue: {
 			angleDeg: camera.cue.angleDeg,

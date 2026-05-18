@@ -1,4 +1,3 @@
-import type { MeterPoint } from "@/types/physics";
 import {
 	TABLE_HEIGHT_M,
 	TABLE_WIDTH_M,
@@ -10,14 +9,18 @@ import {
 
 export interface CameraDetectionResult {
 	table: {
+		/** Four billiards-table corners in screen pixel coordinates. */
 		corners: PixelPoint[];
 	};
 	balls: {
 		id: string;
+		/** Ball x position in billiards-table meter coordinates. */
 		tableX: number;
+		/** Ball y position in billiards-table meter coordinates. */
 		tableY: number;
 	}[];
 	cue: {
+		/** Cue-stick angle calculated from camera/mock detection. */
 		angleDeg: number;
 	};
 }
@@ -35,17 +38,42 @@ interface MockBallPixelRatio {
 	y: number;
 }
 
-const MOCK_BALLS: MockBallPixelRatio[] = [
-	{ id: "white", x: 0.2, y: 0.75 },
-	{ id: "red", x: 0.5, y: 0.5 },
-	{ id: "yellow", x: 0.7, y: 0.3 },
-];
+interface MockCameraScene {
+	tableBoundsRatio: {
+		left: number;
+		right: number;
+		top: number;
+		bottom: number;
+	};
+	balls: MockBallPixelRatio[];
+	cueAngleDeg: number;
+}
 
-function createMockTableCorners(width: number, height: number): PixelPoint[] {
-	const left = width * 0.12;
-	const right = width * 0.88;
-	const top = height * 0.18;
-	const bottom = height * 0.82;
+const MOCK_CAMERA_SCENE: MockCameraScene = {
+	tableBoundsRatio: {
+		left: 0.12,
+		right: 0.88,
+		top: 0.18,
+		bottom: 0.82,
+	},
+	balls: [
+		{ id: "white", x: 0.57 / TABLE_WIDTH_M, y: 1.07 / TABLE_HEIGHT_M },
+		{ id: "red", x: 1 / TABLE_WIDTH_M, y: 0.71 / TABLE_HEIGHT_M },
+		{ id: "yellow", x: 1.23 / TABLE_WIDTH_M, y: 0.36 / TABLE_HEIGHT_M },
+	],
+	cueAngleDeg: 315,
+};
+
+function createMockTableCorners(
+	width: number,
+	height: number,
+	scene: MockCameraScene,
+): PixelPoint[] {
+	const { tableBoundsRatio } = scene;
+	const left = width * tableBoundsRatio.left;
+	const right = width * tableBoundsRatio.right;
+	const top = height * tableBoundsRatio.top;
+	const bottom = height * tableBoundsRatio.bottom;
 
 	return [
 		{ x: left, y: top },
@@ -94,28 +122,21 @@ function toCameraBall(
 	};
 }
 
-function fallbackTablePoint(ball: MockBallPixelRatio): MeterPoint {
-	return {
-		x: ball.x * TABLE_WIDTH_M,
-		y: ball.y * TABLE_HEIGHT_M,
-	};
-}
-
 export function createMockCameraDetectionResult(
 	frame: Partial<CameraFrameInput> = {},
 ): CameraDetectionResult {
 	const width = frame.width ?? 1280;
 	const height = frame.height ?? 720;
-	const corners = createMockTableCorners(width, height);
-	const balls = MOCK_BALLS.map((ball) => {
+	const scene = MOCK_CAMERA_SCENE;
+	const corners = createMockTableCorners(width, height, scene);
+	const balls = scene.balls.map((ball) => {
 		const cameraBall = toCameraBall(ball, corners);
 		if (cameraBall) return cameraBall;
 
-		const fallback = fallbackTablePoint(ball);
 		return {
 			id: ball.id,
-			tableX: fallback.x,
-			tableY: fallback.y,
+			tableX: ball.x * TABLE_WIDTH_M,
+			tableY: ball.y * TABLE_HEIGHT_M,
 		};
 	});
 
@@ -125,15 +146,25 @@ export function createMockCameraDetectionResult(
 		},
 		balls,
 		cue: {
-			angleDeg: 35,
+			angleDeg: scene.cueAngleDeg,
 		},
 	};
+}
+
+export async function detectFromVideoFrame(
+	_frame: CameraFrameInput,
+): Promise<CameraDetectionResult | null> {
+	// TODO: Connect YOLO/ONNXRuntime here.
+	// Return CameraDetectionResult with:
+	// - table.corners in screen pixel coordinates
+	// - balls in table meter coordinates
+	// - cue.angleDeg calculated from the detected cue stick
+	return null;
 }
 
 export async function detectCameraFrame(
 	frame: CameraFrameInput,
 ): Promise<CameraDetectionResult | null> {
-	// TODO: Replace this mock with table, ball, and cue model inference.
-	// Detector output must stay in table meter coordinates, not raw pixels.
-	return createMockCameraDetectionResult(frame);
+	const detected = await detectFromVideoFrame(frame);
+	return detected ?? createMockCameraDetectionResult(frame);
 }

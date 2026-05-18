@@ -15,10 +15,6 @@ import {
 	type DevDetectedStateInput,
 } from "@/lib/detection/dev_detected_state";
 import logger from "@/lib/logger";
-import {
-	TABLE_HEIGHT_M,
-	TABLE_WIDTH_M,
-} from "@/lib/physics/physics_constants";
 import type { DetectedState } from "@/types/detection";
 
 export type DetectionMode = "camera" | "simulator";
@@ -36,11 +32,6 @@ interface UseCameraReturn {
 	errorMsg: string;
 }
 
-interface PixelPoint {
-	x: number;
-	y: number;
-}
-
 function getCanvasFrameSize(canvas: HTMLCanvasElement): {
 	width: number;
 	height: number;
@@ -54,38 +45,7 @@ function getCanvasFrameSize(canvas: HTMLCanvasElement): {
 	};
 }
 
-function tableToPixelPoint(
-	cameraResult: CameraDetectionResult,
-	tableX: number,
-	tableY: number,
-): PixelPoint | null {
-	const topLeft = cameraResult.table.corners[0];
-	const topRight = cameraResult.table.corners[1];
-	const bottomRight = cameraResult.table.corners[2];
-	const bottomLeft = cameraResult.table.corners[3];
-	if (!topLeft || !topRight || !bottomRight || !bottomLeft) return null;
-
-	const u = tableX / TABLE_WIDTH_M;
-	const v = tableY / TABLE_HEIGHT_M;
-
-	return {
-		x:
-			topLeft.x * (1 - u) * (1 - v) +
-			topRight.x * u * (1 - v) +
-			bottomRight.x * u * v +
-			bottomLeft.x * (1 - u) * v,
-		y:
-			topLeft.y * (1 - u) * (1 - v) +
-			topRight.y * u * (1 - v) +
-			bottomRight.y * u * v +
-			bottomLeft.y * (1 - u) * v,
-	};
-}
-
-function drawMockCameraFrame(
-	canvas: HTMLCanvasElement,
-	cameraResult: CameraDetectionResult,
-) {
+function clearVideoCanvas(canvas: HTMLCanvasElement) {
 	const { width, height } = getCanvasFrameSize(canvas);
 	if (canvas.width !== width || canvas.height !== height) {
 		canvas.width = width;
@@ -96,58 +56,6 @@ function drawMockCameraFrame(
 	if (!context) return;
 
 	context.clearRect(0, 0, width, height);
-	context.fillStyle = "#111";
-	context.fillRect(0, 0, width, height);
-
-	const corners = cameraResult.table.corners;
-	if (corners.length === 4) {
-		context.save();
-		context.fillStyle = "#123b30";
-		context.strokeStyle = "rgba(0, 229, 255, 0.55)";
-		context.lineWidth = 3;
-		context.beginPath();
-		context.moveTo(corners[0].x, corners[0].y);
-		for (let index = 1; index < corners.length; index++) {
-			context.lineTo(corners[index].x, corners[index].y);
-		}
-		context.closePath();
-		context.fill();
-		context.stroke();
-		context.restore();
-	}
-
-	for (const ball of cameraResult.balls) {
-		const point = tableToPixelPoint(cameraResult, ball.tableX, ball.tableY);
-		if (!point) continue;
-
-		context.save();
-		context.beginPath();
-		context.arc(point.x, point.y, 12, 0, Math.PI * 2);
-		context.fillStyle =
-			ball.id === "white" ? "#fff" : ball.id === "red" ? "#ff4757" : "#ffd700";
-		context.shadowBlur = 8;
-		context.shadowColor = context.fillStyle;
-		context.fill();
-		context.restore();
-	}
-
-	const cueBall = cameraResult.balls.find((ball) => ball.id === "white");
-	if (!cueBall) return;
-
-	const cuePoint = tableToPixelPoint(cameraResult, cueBall.tableX, cueBall.tableY);
-	if (!cuePoint) return;
-
-	const angleRad = (cameraResult.cue.angleDeg * Math.PI) / 180;
-	const direction = { x: Math.cos(angleRad), y: Math.sin(angleRad) };
-	context.save();
-	context.strokeStyle = "rgba(255, 255, 255, 0.72)";
-	context.lineWidth = 5;
-	context.lineCap = "round";
-	context.beginPath();
-	context.moveTo(cuePoint.x - direction.x * 160, cuePoint.y - direction.y * 160);
-	context.lineTo(cuePoint.x - direction.x * 24, cuePoint.y - direction.y * 24);
-	context.stroke();
-	context.restore();
 }
 
 function useCamera({
@@ -210,6 +118,9 @@ function useCamera({
 		const startSimulatorSource = () => {
 			setCameraReady(true);
 			logger.info("Running simulator input source");
+			if (videoCanvasRef.current) {
+				clearVideoCanvas(videoCanvasRef.current);
+			}
 
 			const loop = () => {
 				if (ac.signal.aborted) return;
@@ -231,7 +142,7 @@ function useCamera({
 					? getCanvasFrameSize(canvas)
 					: { width: 1280, height: 720 };
 				const cameraResult = createMockCameraDetectionResult(frameSize);
-				if (canvas) drawMockCameraFrame(canvas, cameraResult);
+				if (canvas) clearVideoCanvas(canvas);
 				emitCameraResult(cameraResult);
 				rAFId = requestAnimationFrame(loop);
 			};
