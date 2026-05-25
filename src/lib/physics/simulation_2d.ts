@@ -61,15 +61,15 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	// 공이 굴러가며 감속되는 정도
 	rollingFriction: 0.05,
 	// 좌/우, 상/하 스핀이 시간에 따라 줄어드는 정도
-	spinFriction: 0.04,
+	spinFriction: 0.001,
 	// 공끼리 부딪힌 뒤 튕겨 나가는 정도
-	ballRestitution: 0.95,
+	ballRestitution: 0.8,
 	// 공이 쿠션에 맞고 튕겨 나가는 정도
-	cushionRestitution: 0.75,
+	cushionRestitution: 0.8,
 	// 좌/우 스핀이 쿠션 반사에 주는 영향
-	cushionSpinTransfer: 0.36,
+	cushionSpinTransfer: 0.85,
 	// 상/하 스핀이 쿠션 반사각에 주는 영향
-	cushionFollowDrawTransfer: 0.8,
+	cushionFollowDrawTransfer: 0.03,
 	// 좌/우 스핀이 공-공 충돌에 주는 영향
 	ballSpinTransfer: 0.01,
 	// 상/하 스핀이 충돌 후 수구 움직임에 주는 영향
@@ -81,7 +81,7 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	// 스핀 보정이 한 번의 충돌에서 속도를 과하게 바꾸지 않게 막는 최대값
 	maxSpinCorrectionSpeed: 0.45,
 	// 좌/우 스핀이 쿠션 반사 접선 속도에 줄 수 있는 최대 비율
-	maxCushionSpinCorrectionRatio: 0.5,
+	maxCushionSpinCorrectionRatio: 1,
 	// 상/하 스핀이 쿠션 반사 접선 속도에 줄 수 있는 최대 비율
 	maxCushionFollowDrawCorrectionRatio: 0.06,
 	// 쿠션에 맞은 뒤 남는 좌/우 및 상/하 스핀 비율
