@@ -67,7 +67,7 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	// 공이 쿠션에 맞고 튕겨 나가는 정도
 	cushionRestitution: 0.75,
 	// 좌/우 스핀이 쿠션 반사에 주는 영향
-	cushionSpinTransfer: 0.18,
+	cushionSpinTransfer: 0.36,
 	// 상/하 스핀이 쿠션 반사각에 주는 영향
 	cushionFollowDrawTransfer: 0.8,
 	// 좌/우 스핀이 공-공 충돌에 주는 영향
@@ -75,7 +75,7 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	// 상/하 스핀이 충돌 후 수구 움직임에 주는 영향
 	followDrawTransfer: 0.4,
 	// 상/하 스핀이 이동거리와 감속에 주는 영향
-	followDrawMotionTransfer: 0.3,
+	followDrawMotionTransfer: 0.04,
 	// 커트샷에서 공-공 마찰이 목적구 각도에 주는 약한 영향
 	cutThrowTransfer: 0.035,
 	// 스핀 보정이 한 번의 충돌에서 속도를 과하게 바꾸지 않게 막는 최대값
@@ -83,7 +83,7 @@ export const DEFAULT_SIMULATION_2D_TUNING: Simulation2DTuning = {
 	// 좌/우 스핀이 쿠션 반사 접선 속도에 줄 수 있는 최대 비율
 	maxCushionSpinCorrectionRatio: 0.5,
 	// 상/하 스핀이 쿠션 반사 접선 속도에 줄 수 있는 최대 비율
-	maxCushionFollowDrawCorrectionRatio: 0.45,
+	maxCushionFollowDrawCorrectionRatio: 0.06,
 	// 쿠션에 맞은 뒤 남는 좌/우 및 상/하 스핀 비율
 	cushionSpinRetention: 0.72,
 	// 공과 공이 부딪힌 뒤 수구에 남는 스핀 비율

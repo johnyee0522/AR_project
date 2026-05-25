@@ -52,8 +52,8 @@ export const PHYSICS_TEST_SHOT_PRESETS: readonly PhysicsTestShotPreset[] = [
 	},
 	{
 		id: "diagonal-left-2-ball",
-		name: "4. 320도 2구",
-		angleDeg: 320,
+		name: "4. 319도 3쿠션",
+		angleDeg: 319,
 		power: 3,
 		sideSpin: 20,
 		topSpin: 20,
@@ -67,7 +67,7 @@ export const PHYSICS_TEST_SHOT_PRESETS: readonly PhysicsTestShotPreset[] = [
 		id: "diagonal-left-low-2-ball",
 		name: "5. 314도 2구",
 		angleDeg: 314,
-		power: 3,
+		power: 2.7,
 		sideSpin: 20,
 		topSpin: 20,
 		balls: {
@@ -93,9 +93,9 @@ export const PHYSICS_TEST_SHOT_PRESETS: readonly PhysicsTestShotPreset[] = [
 		id: "cluster-292-3-ball",
 		name: "7. 292도 3구",
 		angleDeg: 292,
-		power: 2,
-		sideSpin: 20,
-		topSpin: 25,
+		power: 2.5,
+		sideSpin: 35,
+		topSpin: 38,
 		balls: {
 			cueBall: { x: 1.99, y: 0.93 },
 			red: { x: 1.62, y: 0.67 },
